@@ -52,6 +52,7 @@ DEFAULTS: dict[str, Any] = {
         "edge_zoom_rate": 0.18,
         "sky_max": 0.92,
         "occlusion_max": 0.35,
+        "min_altitude_m": 0.0,  # >0: drop windows flown lower than this (needs the .SRT); 0 = keep low flying
         "motion_target": [12.0, 90.0],  # px/s range scored as 'good motion'
         "weights": {"sharpness": 0.30, "exposure": 0.20, "stability": 0.30, "motion": 0.20},
     },

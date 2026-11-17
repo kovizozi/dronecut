@@ -44,7 +44,7 @@ re-running only does the missing work. Hard-reject thresholds are applied at *se
   on high energy, long on calm). The video is trimmed to exact frame counts from cumulative bar boundaries, so it
   cannot drift against the music. The edit ends on a bar boundary with a fade-out.
 * **Junk rejection** (no AI): blurry, over/under-exposed, shaky or jerky, static or chaotic, rapid zoom,
-  takeoff/landing (start-of-clip receding / end-of-clip approaching ground, or altitude < 1.5 m from the `.SRT`),
+  takeoff/landing (start-of-clip receding / end-of-clip approaching ground; optionally an altitude floor from the `.SRT`, off by default so low, close-to-people flying is kept),
   sky-only, occluded (finger/propeller). All thresholds are in `config.yaml`.
 * **Semantic scoring**: SigLIP (`google/siglip-so400m-patch14-384`) image embeddings vs. positive / negative text
   prompts, YOLOv8n person detection boost. `--fast` replaces both with cheap stand-ins (colour-layout embedding,
@@ -112,7 +112,7 @@ Ryzen 5 7600, 32 GB, RTX 3060 12 GB, Windows 11, ffmpeg 9 with NVENC. Input: 16 
 2. Good shots rejected as `shaky`/`sudden_jerk`? raise `tech.shake_max` / `tech.jerk_max`. Too much wobble kept? lower them.
 3. `static` rejecting slow orbits? lower `tech.motion_min`. `blurry`: lower `tech.min_sharpness_rel`.
 4. Takeoff/landing leaking through: raise `tech.edge_s`, lower `tech.edge_zoom_rate`; with `.SRT` files next to the clips,
-   raise `tech.min_altitude_m`.
+   set `tech.min_altitude_m` (e.g. 1.5, needs the `.SRT`) to drop low flying.
 5. Not enough variety: more `select.clusters`, larger `select.min_gap_s`. Wrong mood: edit the prompts under `semantic:`.
 6. Faster/slower cutting: `music.bars_high/mid/low`. Soft transitions: `render.crossfade_s: 0.4`.
 7. Grade: `render.lut` takes a `.cube` file; per-clip exposure/white-balance normalisation is on by default.

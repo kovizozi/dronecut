@@ -40,7 +40,8 @@ def score_windows(windows: list[dict], cfg: Cfg) -> tuple[list[dict], list[dict]
     for w in windows:
         t, why = score_tech.evaluate(w["feat"], gs, cfg.tech)
         alt = w["feat"].get("alt")
-        if alt is not None and alt < float(cfg.tech.get("min_altitude_m", 1.5)):
+        min_alt = float(cfg.tech.get("min_altitude_m", 0.0))
+        if alt is not None and min_alt > 0 and alt < min_alt:
             why.append("ground_level")
         w["tech"], w["reasons"] = t, why
         base = (wt["technical"] * t + wt["semantic"] * w.get("sem", 0.5)) / tot

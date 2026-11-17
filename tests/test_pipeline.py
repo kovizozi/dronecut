@@ -241,3 +241,14 @@ def test_config_env_expansion_and_friendly_yaml_error(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as e:
         load_config(bad)
     assert "line 2" in str(e.value) and "quote" in str(e.value)
+
+
+def test_low_altitude_kept_by_default_and_droppable():
+    ws = _fake_windows(1, 2)
+    for w in ws:
+        w["feat"].update({"sharp": 100, "luma": 120, "luma_p5": 90, "clip_low": 0, "clip_high": 0, "sky": 0, "occl": 0, "shake": 0.1,
+                          "jerk": 0.5, "motion": 30, "chaos": 1, "zoom": 0.0, "zoom_abs": 0.0, "dist_start": 30, "dist_end": 30, "alt": 0.8})
+    ok, bad = select.score_windows(ws, load_config())
+    assert len(ok) == 2 and not bad
+    ok, bad = select.score_windows(ws, load_config(None, {"tech": {"min_altitude_m": 1.5}}))
+    assert len(bad) == 2 and "ground_level" in bad[0]["reasons"]

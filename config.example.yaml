@@ -34,7 +34,7 @@ tech:                             # --- hard-reject thresholds: tune these first
   zoom_rate_max: 0.45             # rapid scale change
   edge_s: 8.0                     # takeoff/landing zone at the start/end of each clip
   edge_zoom_rate: 0.18
-  min_altitude_m: 1.5             # needs the DJI .SRT sidecar; windows flown below this are dropped
+  min_altitude_m: 0.0             # needs the DJI .SRT; >0 drops windows flown lower than this many metres (e.g. 1.5). 0 = keep low flying
   sky_max: 0.92
   occlusion_max: 0.35
   weights: {sharpness: 0.30, exposure: 0.20, stability: 0.30, motion: 0.20}
