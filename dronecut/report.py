@@ -38,7 +38,7 @@ def _card(w: dict, rel: str, extra: str = "") -> str:
     cap = f'<br><i>{html.escape(w["caption"])}</i>' if w.get("caption") else ""
     return (
         f'<div class="card {cls}" data-id="{html.escape(w["id"])}" data-clip="{html.escape(w["clip_name"])}" '
-        f'data-start="{w["start"]:.2f}" data-end="{w["end"]:.2f}" data-state="{state}">'
+        f'data-start="{w["start"]:.2f}" data-end="{w["end"]:.2f}" data-state="{state}" data-init="{state}">'
         f'<img loading="lazy" src="{html.escape(rel)}" alt="">'
         f'<div class="pick"><button class="in" title="must have in the edit">&#11088; must have</button>'
         f'<button class="ex" title="never use">&#128683; never</button></div>'
@@ -72,10 +72,25 @@ cards.forEach(c => {
 });
 function syncTwins(c) { cards.forEach(o => { if (o !== c && o.dataset.id === c.dataset.id) setState(o, c.dataset.state); }); }
 function collect() {
-  const seen = new Set(), out = {include: [], exclude: []};
+  // pins from the previous build stay unless the user switched their card off; new card picks are added
+  const out = {include: [], exclude: []};
+  const cleared = cards.filter(c => c.dataset.init && !c.dataset.state);
+  for (const kind of ['include', 'exclude']) {
+    for (const p of BASE[kind] || []) {
+      const want = kind === 'include' ? 'in' : 'ex';
+      const drop = cleared.some(c => c.dataset.init === want && c.dataset.clip.toLowerCase().includes(String(p.clip).toLowerCase()) &&
+        (p.start == null || (+c.dataset.start < p.end && p.start < +c.dataset.end)));
+      if (!drop) out[kind].push(p);
+    }
+  }
+  const seen = new Set();
   cards.forEach(c => {
-    const s = c.dataset.state; if (!s || seen.has(c.dataset.id)) return; seen.add(c.dataset.id);
-    (s === 'in' ? out.include : out.exclude).push({clip: c.dataset.clip, start: +c.dataset.start, end: +c.dataset.end});
+    const s = c.dataset.state;
+    if (!s || s === c.dataset.init) return;
+    const e = {clip: c.dataset.clip, start: +c.dataset.start, end: +c.dataset.end};
+    const key = s + e.clip + e.start + e.end;
+    if (seen.has(key)) return; seen.add(key);
+    (s === 'in' ? out.include : out.exclude).push(e);
   });
   return out;
 }
@@ -83,6 +98,16 @@ document.getElementById('dl').onclick = () => {
   const blob = new Blob([JSON.stringify(collect(), null, 1)], {type: 'application/json'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'must_have.json'; a.click();
 };
+if (location.protocol.indexOf('http') === 0) {
+  const sv = document.getElementById('sv'); sv.style.display = '';
+  sv.onclick = async () => {
+    try {
+      const r = await fetch('/api/pins', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Requested-With': 'dronecut'}, body: JSON.stringify(collect())});
+      const j = await r.json(); if (!r.ok) throw new Error(j.error);
+      sv.textContent = 'Saved (' + j.include + ' must-have, ' + j.exclude + ' never) - now press Build again';
+    } catch (e) { alert('Could not save: ' + e.message); }
+  };
+}
 document.getElementById('clr').onclick = () => { cards.forEach(c => setState(c, '')); refresh(); };
 document.getElementById('flt').oninput = e => {
   const q = e.target.value.toLowerCase();
@@ -147,7 +172,7 @@ table{{border-collapse:collapse}} td{{padding:2px 12px 2px 0}} code{{color:#9ad}
 #bar button{{cursor:pointer;padding:4px 10px}} #bar input[type=text]{{padding:3px 6px}}
 </style>
 <div id="bar"><span>&#11088; must have: <b id="n_in">0</b> &nbsp; &#128683; never: <b id="n_ex">0</b></span>
-<button id="dl">Download must_have.json</button><button id="clr">Clear</button>
+<button id="sv" style="display:none">Save picks to project</button><button id="dl">Download must_have.json</button><button id="clr">Clear</button>
 <input id="flt" type="text" placeholder="filter by clip name"><label><input id="only" type="checkbox"> only my picks</label>
 <span>Save the file next to <code>config.yaml</code>, then re-run <code>dronecut build ...</code> (it is picked up automatically).</span></div>
 <h1>dronecut report</h1>
@@ -162,8 +187,8 @@ Any other time range: <code>dronecut build ... --include "0010@1:05-1:12"</code>
 <ul>{rc}</ul><div class="grid">{"".join(_card(w, rel(w)) for w in rej_show)}</div>
 <h2>Stage timings</h2><table>{tim}</table>
 <h2>Clips that failed</h2><ul>{failed or "<li>none</li>"}</ul>
-<script>{JS}</script></html>"""
+<script>const BASE = {json.dumps(d.get("pins") or {"include": [], "exclude": []})};
+{JS}</script></html>"""
     out_html.write_text(doc, encoding="utf-8")
     log.info("report: %s", out_html)
-    _ = json
     return out_html

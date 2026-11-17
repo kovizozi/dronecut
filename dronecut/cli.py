@@ -51,10 +51,22 @@ def main(argv: list[str] | None = None) -> int:
     pr = sub.add_parser("report", help="regenerate report.html from the last build")
     pr.add_argument("-o", "--output-dir", default=None)
     _common(pr)
+    pu = sub.add_parser("ui", help="open the local web interface (browser) to control everything")
+    pu.add_argument("--port", type=int, default=8765)
+    pu.add_argument("--no-browser", action="store_true")
+    pu.add_argument("--config")
+    pm = sub.add_parser("music-scan", help="analyse every track in a folder (BPM / beats) so the UI and --music auto are instant")
+    pm.add_argument("music_dir")
+    _common(pm)
     pc = sub.add_parser("clean-cache", help="delete the analysis cache")
     _common(pc)
     a = ap.parse_args(argv)
-    setup_logging(a.verbose)
+    setup_logging(getattr(a, "verbose", False))
+    if a.cmd == "ui":
+        from .webui import serve
+
+        serve(a.config, a.port, not a.no_browser)
+        return 0
     cfg = _cfg(a)
     from . import pipeline
 
@@ -88,6 +100,21 @@ def main(argv: list[str] | None = None) -> int:
 
         out = Path(a.output_dir or cfg.paths.output_dir)
         console.print(f"report: {write_report(out / 'build.json', cache_dir(cfg), out / 'report.html')}")
+    elif a.cmd == "music-scan":
+        from . import music as music_mod
+        from .pipeline import cache_dir
+
+        files = sorted(f for f in Path(a.music_dir).rglob("*") if f.suffix.lower() in music_mod.AUDIO_EXTS)
+        console.print(f"> music scan: {len(files)} tracks")
+        ok = 0
+        for i, f in enumerate(files, 1):
+            try:
+                tr = music_mod.analyze_track(f, cfg, cache_dir(cfg))
+                ok += 1
+                console.print(f"[{i}/{len(files)}] {f.name}: {tr.bpm:.1f} BPM, {tr.duration:.0f}s")
+            except Exception as e:  # noqa: BLE001
+                console.print(f"[{i}/{len(files)}] {f.name}: skipped ({str(e)[:80]})")
+        console.print(f"done: {ok}/{len(files)} analysed")
     elif a.cmd == "clean-cache":
         p = Path(cfg.paths.cache_dir)
         if p.exists():

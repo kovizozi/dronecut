@@ -41,7 +41,7 @@ dronecut = "dronecut.cli:main"
 include = ["dronecut*"]
 
 [tool.setuptools.package-data]
-dronecut = ["py.typed"]
+dronecut = ["py.typed", "web/*.html"]
 
 [tool.ruff]
 line-length = 110

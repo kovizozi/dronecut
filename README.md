@@ -89,6 +89,19 @@ dronecut clean-cache
 `--music auto` picks from `paths.music_dir` (long enough, tempo in `music.auto_prefer_bpm`). `--seed` makes the whole
 run deterministic. `--config path.yaml` selects a config (default: `./config.yaml`); start from `config.example.yaml`.
 
+## Web interface (`dronecut ui`)
+
+```
+dronecut ui            # opens http://127.0.0.1:8765 in your browser
+```
+Control everything from the browser, with local folders: pick the footage / music / output folders (built-in folder
+browser), tick which clips to use (thumbnails + preview), preview tracks and see their BPM, change every setting
+(length, resolution, cut speed, crossfade, telemetry HUD, quality filter, AI prompts, ...), run Analyze / Build with a
+live log and a cancel button, watch the result, open the report and star the parts you must have, then build again.
+Settings are saved in `ui_settings.json`; your `config.yaml` is only read. The server listens on `127.0.0.1` only and
+needs a per-run token (cookie), a local Host header and a custom header on every write, so other web pages cannot
+drive it. Jobs run the normal CLI in the background, so the CLI and the UI always agree.
+
 ## Pick the parts you must have
 
 `report.html` has a ⭐ *must have* and a 🚫 *never* button on every thumbnail. Click, then **Download must_have.json**,

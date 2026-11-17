@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dronecut</title>
+<style>
+:root{--bg:#0f1115;--panel:#171a20;--panel2:#1e222a;--line:#2a2f3a;--txt:#e7e9ee;--dim:#98a1b3;--acc:#ffb800;--ok:#3ecf8e;--bad:#ff6b6b;--blue:#5aa9ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.45 system-ui,"Segoe UI",sans-serif}
+header{display:flex;align-items:center;gap:14px;padding:12px 22px;border-bottom:1px solid var(--line);background:#0b0d11;position:sticky;top:0;z-index:20}
+header h1{font-size:18px;margin:0;letter-spacing:.5px}header h1 b{color:var(--acc)}
+.chip{font-size:12px;padding:2px 9px;border-radius:99px;background:var(--panel2);color:var(--dim);border:1px solid var(--line)}
+.chip.ok{color:var(--ok)}.chip.run{color:var(--acc);border-color:var(--acc)}.chip.bad{color:var(--bad)}
+nav{display:flex;gap:2px;padding:0 22px;border-bottom:1px solid var(--line);background:#0d0f13;position:sticky;top:49px;z-index:19;overflow-x:auto}
+nav button{background:none;border:0;color:var(--dim);padding:12px 16px;cursor:pointer;font-size:14px;border-bottom:2px solid transparent;white-space:nowrap}
+nav button.on{color:var(--txt);border-bottom-color:var(--acc)}
+main{padding:22px;max-width:1280px;margin:0 auto}
+section{display:none}section.on{display:block}
+h2{font-size:16px;margin:0 0 12px}h3{font-size:13px;margin:18px 0 8px;color:var(--acc);text-transform:uppercase;letter-spacing:.8px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.row{display:flex;gap:10px;align-items:center;margin:8px 0;flex-wrap:wrap}
+.row label.l{width:190px;color:var(--dim)}
+input[type=text],input[type=number],select,textarea{background:#0e1014;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:7px 9px;font:inherit}
+input[type=text]{flex:1;min-width:260px}input[type=number]{width:110px}textarea{width:100%;min-height:90px;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+input[type=color]{background:none;border:1px solid var(--line);border-radius:6px;width:44px;height:30px;padding:2px}
+a.b,button.b{text-decoration:none;display:inline-block;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:7px;padding:7px 14px;cursor:pointer;font:inherit}
+a.b:hover,button.b:hover{border-color:var(--dim)}a.b.pri,button.b.pri{background:var(--acc);color:#111;border-color:var(--acc);font-weight:600}
+button.b.red{border-color:var(--bad);color:var(--bad)}button.b:disabled{opacity:.45;cursor:default}
+.hint{color:var(--dim);font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.clip{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.clip.off{opacity:.4}.clip img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;background:#000;cursor:pointer}
+.clip .m{padding:8px 10px;font-size:12.5px;color:var(--dim)}.clip .m b{color:var(--txt);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag{display:inline-block;padding:0 6px;border-radius:5px;background:#26303f;color:var(--blue);font-size:11px;margin-right:4px}
+table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line)}th{color:var(--dim);font-weight:500;font-size:12px}
+tr.sel td{background:#2a2410}
+#log{background:#08090c;border:1px solid var(--line);border-radius:8px;padding:10px;height:380px;overflow:auto;font:12px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;color:#c9d1dc}
+.steps{display:flex;gap:4px;margin:10px 0;flex-wrap:wrap}.step{font-size:11.5px;padding:3px 9px;border-radius:5px;background:var(--panel2);color:var(--dim)}
+.step.done{color:var(--ok)}.step.cur{background:var(--acc);color:#111;font-weight:600}
+video{width:100%;max-height:560px;background:#000;border-radius:8px}
+iframe{width:100%;height:760px;border:1px solid var(--line);border-radius:8px;background:#14161a}
+.modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:50}.modal.on{display:flex}
+.modal .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;width:min(720px,94vw);max-height:84vh;display:flex;flex-direction:column}
+.modal .hd{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center}
+.modal .bd{overflow:auto;padding:6px 8px;flex:1}.modal .it{padding:7px 10px;border-radius:6px;cursor:pointer;display:flex;gap:8px;align-items:center}.modal .it:hover{background:var(--panel2)}
+.modal .ft{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.toast{position:fixed;bottom:18px;right:18px;background:var(--panel2);border:1px solid var(--line);padding:10px 16px;border-radius:8px;z-index:60;display:none;max-width:440px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:900px){.two{grid-template-columns:1fr}}
+.pin{display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header>
+  <h1>drone<b>cut</b></h1>
+  <span class="chip" id="c_env">checking…</span><span class="chip" id="c_job">idle</span>
+  <span style="flex:1"></span><span class="hint" id="c_cwd"></span>
+</header>
+<nav id="tabs"></nav>
+<main>
+
+<section id="t_project">
+  <div class="card">
+    <h2>Folders</h2>
+    <div class="row"><label class="l">Footage folder</label><input type="text" id="footage" data-s="footage" placeholder="e.g. C:\VIDEO\2026.10.04\raw"><button class="b" data-pick="footage">Browse…</button></div>
+    <div class="row"><label class="l">Output folder</label><input type="text" data-s="output_dir"><button class="b" data-pick="output_dir">Browse…</button></div>
+    <div class="row"><label class="l">Cache folder</label><input type="text" data-s="cache_dir"><button class="b" data-pick="cache_dir">Browse…</button></div>
+    <p class="hint">Footage is only read, never modified. The cache holds proxies and analysis (safe to delete, it is rebuilt). The final video is rendered from your original files.</p>
+  </div>
+  <div class="card">
+    <h2>Music</h2>
+    <div class="row"><label class="l">Mode</label>
+      <select data-s="music_mode"><option value="auto">Automatic (best fit from the music folder)</option><option value="file">A specific track</option></select></div>
+    <div class="row"><label class="l">Music folder</label><input type="text" data-s="music_dir" placeholder="e.g. C:\MUSIC"><button class="b" data-pick="music_dir">Browse…</button></div>
+    <div class="row"><label class="l">Specific track</label><input type="text" data-s="music_file"><button class="b" data-pick="music_file">Browse…</button></div>
+  </div>
+  <div class="card">
+    <h2>Quick start</h2>
+    <p>1. Choose the folders above. 2. <b>Footage</b> tab: check the clips. 3. <b>Edit</b> tab: length, style, telemetry HUD… 4. <b>Run</b> tab: Analyze (once per footage set), then Build. 5. <b>Results</b>: watch, then star the parts you must have and build again.</p>
+    <div class="row"><button class="b pri" onclick="go('footage')">Next: footage →</button></div>
+  </div>
+</section>
+
+<section id="t_footage">
+  <div class="card">
+    <div class="row"><h2 style="margin:0">Footage</h2><span class="hint" id="f_sum"></span><span style="flex:1"></span>
+      <button class="b" id="f_all">Use all</button><button class="b" id="f_none">Use none</button><button class="b" id="f_scan">Rescan folder</button></div>
+    <p class="hint">Untick clips to leave them out of the edit completely. Click a thumbnail to preview the clip.</p>
+    <div class="grid" id="clips"></div>
+    <div id="f_prev" style="margin-top:14px"></div>
+  </div>
+</section>
+
+<section id="t_music">
+  <div class="card">
+    <div class="row"><h2 style="margin:0">Music</h2><span class="hint" id="m_sum"></span><span style="flex:1"></span><button class="b" id="m_scan">Analyse all tracks (BPM)</button><button class="b" id="m_ref">Refresh</button></div>
+    <p class="hint">“Analyse” reads the beat of every track once (cached) so automatic mode can choose by tempo and length.</p>
+    <div id="m_audio"></div>
+    <table><thead><tr><th></th><th>Track</th><th>Length</th><th>BPM</th><th>MB</th><th></th></tr></thead><tbody id="tracks"></tbody></table>
+  </div>
+</section>
+
+<section id="t_edit">
+  <div class="row"><button class="b" id="e_reset">Reset all my changes to defaults</button><span class="hint" id="e_note"></span></div>
+  <div id="form"></div>
+  <div class="card"><h3>Advanced: extra config (YAML)</h3>
+    <p class="hint">Anything from <code>config.example.yaml</code> not covered above. Merged last.</p>
+    <textarea id="extra" data-s="extra_yaml" spellcheck="false" placeholder="tech:&#10;  shake_max: 3.0"></textarea></div>
+</section>
+
+<section id="t_run">
+  <div class="card">
+    <div class="row">
+      <button class="b" id="r_an">1 · Analyze footage</button>
+      <button class="b pri" id="r_build">2 · Build highlight</button>
+      <button class="b red" id="r_cancel" disabled>Cancel</button>
+      <span class="hint">Analyze once per footage set (cached). Build is quick to repeat with other music, length or picks.</span>
+    </div>
+    <div class="steps" id="steps"></div>
+    <div id="log"></div>
+  </div>
+</section>
+
+<section id="t_results">
+  <div class="card">
+    <div class="row"><h2 style="margin:0">Results</h2><span style="flex:1"></span><button class="b" id="res_ref">Refresh</button></div>
+    <table><thead><tr><th>Built</th><th>Length</th><th>Cuts</th><th>Music</th><th>Seed</th><th>Must-haves</th><th></th></tr></thead><tbody id="builds"></tbody></table>
+  </div>
+  <div class="card" id="viewer" style="display:none">
+    <div class="row"><h2 style="margin:0" id="v_title"></h2><span style="flex:1"></span>
+      <a class="b" id="v_fcp" href="#" download>Download timeline (.fcpxml)</a><button class="b" id="v_open">Open folder</button><button class="b pri" id="v_again">Build again with my picks</button></div>
+    <video id="v_video" controls preload="metadata"></video>
+    <div id="v_tele" class="hint" style="margin:8px 0"></div>
+    <h3>Report — star ⭐ the parts you must have, 🚫 the ones to never use, then “Save picks to project”</h3>
+    <iframe id="v_report"></iframe>
+  </div>
+</section>
+
+<section id="t_picks">
+  <div class="card">
+    <div class="row"><h2 style="margin:0">Must have / never use</h2><span style="flex:1"></span><button class="b" id="p_clear">Clear all</button><button class="b pri" id="p_build">Build again</button></div>
+    <p class="hint">Saved in <code>must_have.json</code> next to where you started the UI; every build uses it. Must-have parts override the quality filter and are placed on the beat. Add parts from the report (⭐), or by hand here.</p>
+    <div class="row">
+      <select id="p_kind"><option value="include">⭐ must have</option><option value="exclude">🚫 never use</option></select>
+      <input type="text" id="p_clip" placeholder="clip (part of the file name, e.g. 0010)" style="min-width:220px">
+      <input type="text" id="p_start" placeholder="from (45 or 1:05)" style="min-width:120px;flex:0 0 130px"><input type="text" id="p_end" placeholder="to (60)" style="min-width:100px;flex:0 0 110px">
+      <button class="b" id="p_add">Add</button></div>
+    <div id="pins"></div>
+  </div>
+</section>
+
+</main>
+
+<div class="modal" id="modal"><div class="box">
+  <div class="hd"><button class="b" id="m_up">↑ Up</button><input type="text" id="m_path" style="flex:1"><button class="b" id="m_go">Go</button></div>
+  <div class="bd" id="m_list"></div>
+  <div class="ft"><span class="hint" id="m_hint" style="flex:1"></span><button class="b" id="m_cancel">Cancel</button><button class="b pri" id="m_ok">Select this folder</button></div>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+let S = null, CFG = null, ENV = null, CLIPS = [], TRACKS = [], BUILDS = [], pollT = null, since = 0, curBuild = null;
+
+async function api(path, body) {
+  const opt = {headers: {'X-Requested-With': 'dronecut'}};
+  if (body !== undefined) { opt.method = 'POST'; opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+  const r = await fetch(path, opt);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+function toast(msg, ms = 3500) { const t = $('#toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', ms); }
+const getP = (o, p) => p.split('.').reduce((a, k) => (a == null ? undefined : a[k]), o);
+function setP(o, p, v) { const ks = p.split('.'); let a = o; ks.slice(0, -1).forEach(k => a = a[k] = a[k] || {}); a[ks.at(-1)] = v; }
+function delP(o, p) {
+  const ks = p.split('.'); const chain = [o]; let a = o;
+  for (const k of ks.slice(0, -1)) { a = a && a[k]; chain.push(a); if (!a) return; }
+  delete a[ks.at(-1)];
+  for (let i = chain.length - 1; i > 0; i--) { if (Object.keys(chain[i]).length === 0) delete chain[i - 1][ks[i - 1]]; }
+}
+let saveT = null;
+function save() { clearTimeout(saveT); saveT = setTimeout(() => api('/api/settings', S).catch(e => toast('Could not save: ' + e.message)), 350); }
+
+/* ------------------------------------------------------------------ tabs */
+const TABS = [['project', 'Project'], ['footage', 'Footage'], ['music', 'Music'], ['edit', 'Edit'], ['run', 'Run'], ['results', 'Results'], ['picks', 'Must-have']];
+function go(id) {
+  $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === id));
+  $$('main > section').forEach(s => s.classList.toggle('on', s.id === 't_' + id));
+  location.hash = id;
+  if (id === 'footage') loadClips(); if (id === 'music') loadTracks(); if (id === 'results') loadBuilds(); if (id === 'picks') loadPins();
+}
+$('#tabs').innerHTML = TABS.map(([i, n]) => `<button data-t="${i}">${n}</button>`).join('');
+$('#tabs').onclick = e => { if (e.target.dataset.t) go(e.target.dataset.t); };
+
+/* ------------------------------------------------------------------ simple bound settings */
+function bindSimple() {
+  $$('[data-s]').forEach(el => {
+    const k = el.dataset.s;
+    if (el.type === 'checkbox') el.checked = !!S[k]; else el.value = S[k] ?? '';
+    el.onchange = el.oninput = () => { S[k] = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? +el.value : el.value); save(); if (k === 'footage') CLIPS = []; if (k === 'music_dir') TRACKS = []; };
+  });
+}
+
+/* ------------------------------------------------------------------ edit form */
+const FORM = [
+  ['Length & output', [
+    {s: 'duration', label: 'Length (seconds)', type: 'number', min: 15, step: 5, hint: 'Ends on a bar of the music, so it can be a little shorter.'},
+    {s: 'res', label: 'Resolution', type: 'select', opts: [[720, '720p'], [1080, '1080p (Full HD)'], [1440, '1440p'], [2160, '4K']]},
+    {s: 'seed', label: 'Variation (seed)', type: 'number', step: 1, hint: 'Same seed = same edit. Change it for a different cut.'},
+    {k: 'render.codec', label: 'Codec', type: 'select', opts: [['h264', 'H.264 (compatible)'], ['hevc', 'HEVC (smaller)']]},
+    {k: 'render.nvenc', label: 'GPU encoder (NVENC)', type: 'select', opts: [['auto', 'Auto'], ['on', 'Always'], ['off', 'Never (CPU)']]},
+    {k: 'render.crf', label: 'Quality (lower = better)', type: 'number', min: 10, max: 35, step: 1},
+  ]],
+  ['Cutting & look', [
+    {k: 'music.bars_high', label: 'Bars per shot — energetic parts', type: 'number', min: 1, max: 4, step: 1, hint: '1 bar = about 2 s at 120 BPM'},
+    {k: 'music.bars_mid', label: 'Bars per shot — medium parts', type: 'number', min: 1, max: 4, step: 1},
+    {k: 'music.bars_low', label: 'Bars per shot — calm parts', type: 'number', min: 1, max: 4, step: 1},
+    {k: 'render.crossfade_s', label: 'Crossfade (seconds, 0 = hard cuts)', type: 'number', min: 0, max: 1.5, step: 0.1},
+    {k: 'render.slowmo_factor', label: 'Slow motion on smooth shots', type: 'number', min: 0.5, max: 1, step: 0.05, hint: '1 = off, 0.8 = gentle'},
+    {k: 'render.normalize_exposure', label: 'Even out exposure between clips', type: 'bool'},
+    {k: 'render.white_balance', label: 'Even out white balance', type: 'bool'},
+    {k: 'render.lut', label: 'Colour LUT (.cube path)', type: 'text'},
+    {k: 'music.fade_out_s', label: 'Music fade-out (s)', type: 'number', min: 0, max: 8, step: 0.5},
+  ]],
+  ['Telemetry overlay (from the .SRT files)', [
+    {k: 'hud.enabled', label: 'Show speed / altitude / map', type: 'bool', hint: 'Speed, heading and distance are computed from the GPS track.'},
+    {k: 'hud.style', label: 'Style', type: 'select', opts: [['full', 'Full (speed, altitude, climb, distance, heading, time, map)'], ['minimal', 'Minimal (speed + altitude)']]},
+    {k: 'hud.units', label: 'Units', type: 'select', opts: [['metric', 'km/h, m'], ['imperial', 'mph, ft']]},
+    {k: 'hud.position', label: 'Position', type: 'select', opts: [['bottom-left', 'Bottom left'], ['bottom-right', 'Bottom right'], ['top-left', 'Top left'], ['top-right', 'Top right']]},
+    {k: 'hud.scale', label: 'Size', type: 'number', min: 0.5, max: 2.5, step: 0.1, hint: '1 = standard, 1.4 = big'},
+    {k: 'hud.accent', label: 'Accent colour', type: 'color'},
+    {k: 'hud.show_map', label: 'Mini-map of the flight path', type: 'bool'},
+    {k: 'hud.fade_s', label: 'Fade at each cut (s)', type: 'number', min: 0, max: 1, step: 0.05},
+  ]],
+  ['Choosing the shots', [
+    {k: 'select.min_gap_s', label: 'Min gap between shots of one clip (s)', type: 'number', min: 0, max: 30, step: 1},
+    {k: 'select.clusters', label: 'Variety groups', type: 'number', min: 1, max: 20, step: 1, hint: 'More = more varied scenes'},
+    {k: 'select.weights.technical', label: 'Weight: technical quality', type: 'number', min: 0, max: 1, step: 0.05},
+    {k: 'select.weights.semantic', label: 'Weight: scene content (AI)', type: 'number', min: 0, max: 1, step: 0.05},
+    {k: 'select.open_with_wide', label: 'Open with a wide establishing shot', type: 'bool'},
+    {k: 'select.close_with_pullaway', label: 'Close with a pull-away shot', type: 'bool'},
+  ]],
+  ['Quality filter — rejects a shot when…', [
+    {k: 'tech.shake_max', label: 'camera shake is above', type: 'number', min: 0.2, max: 12, step: 0.1, hint: 'Raise if good shots get rejected as “shaky”'},
+    {k: 'tech.jerk_max', label: 'sudden jerk is above', type: 'number', min: 1, max: 60, step: 1},
+    {k: 'tech.min_sharpness_rel', label: 'sharpness is below (× typical)', type: 'number', min: 0, max: 1, step: 0.05},
+    {k: 'tech.motion_min', label: 'it is static (motion below)', type: 'number', min: 0, max: 20, step: 0.5},
+    {k: 'tech.motion_max', label: 'it is chaotic (motion above)', type: 'number', min: 50, max: 800, step: 10},
+    {k: 'tech.luma_min', label: 'brightness is below', type: 'number', min: 0, max: 120, step: 1},
+    {k: 'tech.luma_max', label: 'brightness is above', type: 'number', min: 120, max: 255, step: 1},
+    {k: 'tech.edge_s', label: 'take-off / landing zone at clip ends (s)', type: 'number', min: 0, max: 30, step: 1},
+    {k: 'tech.min_altitude_m', label: 'flown lower than (m, 0 = keep)', type: 'number', min: 0, max: 20, step: 0.5, hint: 'Needs the .SRT files'},
+    {k: 'tech.sky_max', label: 'sky fills more than', type: 'number', min: 0.3, max: 1, step: 0.02},
+    {k: 'tech.zoom_rate_max', label: 'zoom-like scale change is above', type: 'number', min: 0.05, max: 2, step: 0.05},
+  ]],
+  ['AI scoring', [
+    {s: 'fast', label: 'Fast mode (skip the AI models)', type: 'bool', hint: 'Much quicker, no scene-content scoring'},
+    {s: 'vlm', label: 'Describe & rate the top shots with a local VLM', type: 'bool', hint: 'Qwen2.5-VL, needs ~16 GB download once'},
+    {k: 'semantic.person_boost', label: 'Boost shots with people', type: 'number', min: 0, max: 0.5, step: 0.05},
+    {k: 'semantic.positive_prompts', label: 'Looks good: shots like…', type: 'lines', hint: 'one phrase per line'},
+    {k: 'semantic.negative_prompts', label: 'Looks bad: shots like…', type: 'lines'},
+    {k: 'semantic.wide_prompts', label: 'Opening shot looks like…', type: 'lines'},
+  ]],
+];
+function effective(k) { const o = getP(S.overrides, k); return o !== undefined ? o : getP(CFG, k); }
+function buildForm() {
+  $('#form').innerHTML = FORM.map(([title, fields], si) => `<div class="card"><h3 style="margin-top:0">${esc(title)}</h3>` + fields.map((f, fi) => {
+    const id = `f_${si}_${fi}`;
+    let inp = '';
+    const v = f.s ? S[f.s] : effective(f.k);
+    if (f.type === 'number') inp = `<input type="number" id="${id}" value="${esc(v ?? '')}" ${f.min !== undefined ? `min="${f.min}"` : ''} ${f.max !== undefined ? `max="${f.max}"` : ''} step="${f.step ?? 'any'}">`;
+    else if (f.type === 'bool') inp = `<input type="checkbox" id="${id}" ${v ? 'checked' : ''}>`;
+    else if (f.type === 'select') inp = `<select id="${id}">${f.opts.map(([val, lab]) => `<option value="${esc(val)}" ${String(val) === String(v) ? 'selected' : ''}>${esc(lab)}</option>`).join('')}</select>`;
+    else if (f.type === 'color') inp = `<input type="color" id="${id}" value="${esc(v || '#ffb800')}">`;
+    else if (f.type === 'lines') inp = `<textarea id="${id}" style="min-height:84px">${esc((v || []).join('\n'))}</textarea>`;
+    else inp = `<input type="text" id="${id}" value="${esc(v ?? '')}">`;
+    return `<div class="row"><label class="l" for="${id}">${esc(f.label)}</label>${inp}${f.hint ? `<span class="hint">${esc(f.hint)}</span>` : ''}</div>`;
+  }).join('') + '</div>').join('');
+  FORM.forEach(([, fields], si) => fields.forEach((f, fi) => {
+    const el = $('#f_' + si + '_' + fi);
+    el.onchange = () => {
+      let val = el.type === 'checkbox' ? el.checked : el.value;
+      if (f.type === 'number') val = el.value === '' ? undefined : +el.value;
+      if (f.type === 'select' && f.opts && typeof f.opts[0][0] === 'number') val = +val;
+      if (f.type === 'lines') val = el.value.split('\n').map(x => x.trim()).filter(Boolean);
+      if (f.s) S[f.s] = val;
+      else if (val === undefined || JSON.stringify(val) === JSON.stringify(getP(CFG, f.k))) delP(S.overrides, f.k);
+      else setP(S.overrides, f.k, val);
+      save(); $('#e_note').textContent = Object.keys(S.overrides).length ? 'You have custom settings (saved automatically).' : '';
+    };
+  }));
+  $('#e_note').textContent = Object.keys(S.overrides).length ? 'You have custom settings (saved automatically).' : '';
+}
+$('#e_reset').onclick = () => { S.overrides = {}; S.extra_yaml = ''; $('#extra').value = ''; buildForm(); save(); toast('Reset to defaults'); };
+
+/* ------------------------------------------------------------------ folder picker */
+let pickResolve = null, pickKind = 'dir', pickCur = '';
+async function browse(path) {
+  const r = await api('/api/fs?path=' + encodeURIComponent(path || ''));
+  pickCur = r.path; $('#m_path').value = r.path; $('#m_up').disabled = r.parent === null;
+  $('#m_up').dataset.p = r.parent ?? '';
+  const files = pickKind === 'file' ? r.files : [];
+  $('#m_list').innerHTML = r.dirs.map(d => `<div class="it" data-d="${esc(d.path)}">📁 ${esc(d.name)}</div>`).join('') +
+    files.map(f => `<div class="it" data-f="${esc(f.path)}">🎵 ${esc(f.name)} <span class="hint">${f.mb} MB</span></div>`).join('') +
+    (!r.dirs.length && !files.length ? '<div class="hint" style="padding:10px">empty</div>' : '');
+  $('#m_ok').style.display = pickKind === 'file' ? 'none' : '';
+  $('#m_hint').textContent = pickKind === 'file' ? 'Click a track to choose it' : (r.path ? '' : 'Pick a drive or shortcut');
+}
+function pick(start, kind) { pickKind = kind; $('#modal').classList.add('on'); browse(start || '').catch(() => browse('')); return new Promise(res => pickResolve = res); }
+function closePick(v) { $('#modal').classList.remove('on'); if (pickResolve) pickResolve(v); pickResolve = null; }
+$('#m_list').onclick = e => { const it = e.target.closest('.it'); if (!it) return; if (it.dataset.d) browse(it.dataset.d); else if (it.dataset.f) closePick(it.dataset.f); };
+$('#m_up').onclick = () => browse($('#m_up').dataset.p);
+$('#m_go').onclick = () => browse($('#m_path').value).catch(e => toast(e.message));
+$('#m_cancel').onclick = () => closePick(null);
+$('#m_ok').onclick = () => closePick(pickCur || null);
+$$('[data-pick]').forEach(b => b.onclick = async () => {
+  const k = b.dataset.pick; const kind = k === 'music_file' ? 'file' : 'dir';
+  const start = S[k] ? (kind === 'file' ? S[k].replace(/[\\/][^\\/]*$/, '') : S[k]) : (k === 'music_file' ? S.music_dir : '');
+  const v = await pick(start, kind);
+  if (v) { S[k] = v; if (k === 'music_file') S.music_mode = 'file'; bindSimple(); save(); if (k === 'footage') CLIPS = []; if (k === 'music_dir') TRACKS = []; }
+});
+
+/* ------------------------------------------------------------------ footage */
+const fmt = s => { s = Math.round(s); return s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}s`; };
+async function loadClips(force) {
+  if (!S.footage) { $('#clips').innerHTML = '<p class="hint">Choose the footage folder in the Project tab first.</p>'; $('#f_sum').textContent = ''; return; }
+  if (CLIPS.length && !force) return renderClips();
+  $('#clips').innerHTML = '<p class="hint">Reading clips…</p>';
+  try { CLIPS = (await api('/api/clips')).clips; } catch (e) { $('#clips').innerHTML = `<p class="hint">${esc(e.message)}</p>`; return; }
+  renderClips();
+}
+function renderClips() {
+  const skip = new Set(S.skip_clips);
+  const use = CLIPS.filter(c => !skip.has(c.name));
+  $('#f_sum').textContent = `${CLIPS.length} clips · ${fmt(CLIPS.reduce((a, c) => a + c.duration, 0))} total · using ${use.length} (${fmt(use.reduce((a, c) => a + c.duration, 0))})`;
+  $('#clips').innerHTML = CLIPS.map((c, i) => `<div class="clip ${skip.has(c.name) ? 'off' : ''}">
+    <img loading="lazy" data-i="${i}" src="/api/thumb?path=${encodeURIComponent(c.path)}" alt="">
+    <div class="m"><b title="${esc(c.rel)}">${esc(c.name)}</b>${c.width}×${c.height} · ${c.fps} fps · ${fmt(c.duration)}<br>
+    ${c.srt ? '<span class="tag">GPS</span>' : ''}${c.audio ? '<span class="tag">audio</span>' : ''}<span class="tag">${esc(c.codec)}</span>
+    <label style="float:right"><input type="checkbox" data-u="${i}" ${skip.has(c.name) ? '' : 'checked'}> use</label></div></div>`).join('') || '<p class="hint">No video files found in that folder.</p>';
+}
+$('#clips').onchange = e => {
+  const i = e.target.dataset.u; if (i === undefined) return;
+  const name = CLIPS[+i].name; const s = new Set(S.skip_clips); e.target.checked ? s.delete(name) : s.add(name); S.skip_clips = [...s]; save(); renderClips();
+};
+$('#clips').onclick = e => {
+  const i = e.target.dataset.i; if (i === undefined) return; const c = CLIPS[+i];
+  const root = S.footage.replace(/[\\/]+$/, '');
+  $('#f_prev').innerHTML = `<h3>${esc(c.name)}</h3><video controls autoplay src="/files/footage/${c.rel.split(/[\\/]/).map(encodeURIComponent).join('/')}"></video>`;
+  $('#f_prev').scrollIntoView({behavior: 'smooth'});
+};
+$('#f_all').onclick = () => { S.skip_clips = []; save(); renderClips(); };
+$('#f_none').onclick = () => { S.skip_clips = CLIPS.map(c => c.name); save(); renderClips(); };
+$('#f_scan').onclick = () => loadClips(true);
+
+/* ------------------------------------------------------------------ music */
+async function loadTracks() {
+  if (!S.music_dir) { $('#tracks').innerHTML = '<tr><td colspan="6" class="hint">Choose the music folder in the Project tab first.</td></tr>'; return; }
+  try { TRACKS = (await api('/api/tracks')).tracks; } catch (e) { toast(e.message); return; }
+  renderTracks();
+}
+function renderTracks() {
+  const an = TRACKS.filter(t => t.bpm).length;
+  $('#m_sum').textContent = `${TRACKS.length} tracks · ${an} analysed · mode: ${S.music_mode === 'auto' ? 'automatic' : 'specific track'}`;
+  $('#tracks').innerHTML = TRACKS.map((t, i) => `<tr class="${S.music_mode === 'file' && S.music_file === t.path ? 'sel' : ''}">
+    <td><button class="b" data-play="${i}">▶</button></td><td>${esc(t.name)}</td><td>${t.duration ? fmt(t.duration) : '—'}</td><td>${t.bpm ?? '—'}</td><td>${t.mb}</td>
+    <td><button class="b" data-use="${i}">Use this track</button></td></tr>`).join('');
+}
+$('#tracks').onclick = e => {
+  const p = e.target.dataset.play, u = e.target.dataset.use;
+  if (p !== undefined) { const t = TRACKS[+p]; const rel = t.rel.split(/[\\/]/).map(encodeURIComponent).join('/'); $('#m_audio').innerHTML = `<audio controls autoplay style="width:100%;margin:6px 0" src="/files/music/${rel}"></audio>`; }
+  if (u !== undefined) { S.music_mode = 'file'; S.music_file = TRACKS[+u].path; bindSimple(); save(); renderTracks(); toast('Using ' + TRACKS[+u].name); }
+};
+$('#m_ref').onclick = loadTracks;
+$('#m_scan').onclick = () => startJob('music');
+
+/* ------------------------------------------------------------------ jobs */
+async function startJob(kind) {
+  try { await api('/api/settings', S); const j = await api('/api/job', {kind}); since = 0; $('#log').textContent = ''; go('run'); poll(); } catch (e) { toast(e.message, 6000); }
+}
+$('#r_an').onclick = () => startJob('analyze');
+$('#r_build').onclick = () => startJob('build');
+$('#r_cancel').onclick = () => api('/api/job/cancel', {}).then(() => toast('Cancelling…'));
+function renderJob(j) {
+  const run = j.state === 'running';
+  $('#r_an').disabled = $('#r_build').disabled = run; $('#r_cancel').disabled = !run;
+  const c = $('#c_job'); c.className = 'chip ' + (run ? 'run' : j.state === 'done' ? 'ok' : (j.state === 'failed' || j.state === 'cancelled') ? 'bad' : '');
+  c.textContent = j.state === 'idle' ? 'idle' : `${j.kind}: ${j.state}${run && j.stage ? ' · ' + j.stage : ''}`;
+  const st = j.stages || [], cur = st.indexOf(j.stage);
+  $('#steps').innerHTML = j.kind === 'build' || j.kind === 'analyze' ? st.map((s, i) => `<span class="step ${run && i === cur ? 'cur' : (i < cur || (!run && j.state === 'done' && i <= cur)) ? 'done' : ''}">${esc(s)}</span>`).join('') : '';
+}
+async function poll() {
+  clearTimeout(pollT);
+  try {
+    const j = await api('/api/job?since=' + since);
+    if (j.lines && j.lines.length) { const L = $('#log'); const atEnd = L.scrollTop + L.clientHeight >= L.scrollHeight - 30; L.textContent += j.lines.join('\n') + '\n'; if (atEnd) L.scrollTop = L.scrollHeight; }
+    since = j.next ?? since; renderJob(j);
+    if (j.state === 'running') pollT = setTimeout(poll, 900);
+    else if (j.state === 'done' && j.kind === 'build') { toast('Build finished — see Results'); loadBuilds(); }
+    else if (j.state === 'done' && j.kind === 'music') { toast('Music analysed'); }
+    else if (j.state === 'failed') toast('Job failed — see the log', 6000);
+  } catch (e) { pollT = setTimeout(poll, 2500); }
+}
+
+/* ------------------------------------------------------------------ results */
+async function loadBuilds() {
+  BUILDS = (await api('/api/builds')).builds;
+  $('#builds').innerHTML = BUILDS.map((b, i) => `<tr><td>${new Date(b.mtime * 1000).toLocaleString()}</td><td>${fmt(b.duration)}</td><td>${b.cuts}</td><td>${esc(b.music)} <span class="hint">${b.bpm} BPM</span></td><td>${b.seed ?? ''}</td><td>${b.pinned || ''}</td><td><button class="b pri" data-v="${i}">Open</button></td></tr>`).join('') || '<tr><td colspan="7" class="hint">No builds yet — run Analyze, then Build.</td></tr>';
+  if (BUILDS.length && curBuild === null) show(0);
+}
+$('#builds').onclick = e => { if (e.target.dataset.v !== undefined) show(+e.target.dataset.v); };
+function show(i) {
+  curBuild = i; const b = BUILDS[i]; if (!b) return;
+  $('#viewer').style.display = '';
+  $('#v_title').textContent = `${fmt(b.duration)} · ${b.cuts} cuts · ${b.music}`;
+  const v = $('#v_video'); if (b.mp4) { v.src = b.mp4 + '?t=' + b.mtime; } else v.removeAttribute('src');
+  $('#v_fcp').style.display = b.fcpxml ? '' : 'none'; if (b.fcpxml) $('#v_fcp').href = b.fcpxml;
+  $('#v_report').src = b.report ? b.report + '?t=' + b.mtime : 'about:blank';
+  const t = b.telemetry; $('#v_tele').textContent = t ? 'Flight data in this edit: ' + Object.entries(t).slice(0, 4).map(([n, x]) => `${n.slice(4, 18)} max ${x.max_speed_kmh.toFixed(0)} km/h, ${x.max_alt_m.toFixed(0)} m high`).join(' · ') : '';
+  $('#viewer').scrollIntoView({behavior: 'smooth'});
+}
+$('#v_open').onclick = () => api('/api/open', {path: BUILDS[curBuild].dir}).catch(e => toast(e.message));
+$('#v_again').onclick = () => startJob('build');
+$('#res_ref').onclick = loadBuilds;
+
+/* ------------------------------------------------------------------ picks */
+let PINS = {include: [], exclude: []};
+const tfmt = x => x == null ? '' : fmt(x);
+async function loadPins() { PINS = await api('/api/pins'); renderPins(); }
+function renderPins() {
+  const row = (kind, p, i) => `<div class="pin"><span>${kind === 'include' ? '⭐' : '🚫'}</span><b>${esc(p.clip)}</b><span class="hint">${p.start == null ? 'whole clip' : tfmt(p.start) + ' – ' + tfmt(p.end)}</span><span style="flex:1"></span><button class="b" data-d="${kind}:${i}">Remove</button></div>`;
+  $('#pins').innerHTML = PINS.include.map((p, i) => row('include', p, i)).join('') + PINS.exclude.map((p, i) => row('exclude', p, i)).join('') || '<p class="hint">Nothing picked yet.</p>';
+}
+async function savePins() { await api('/api/pins', PINS); renderPins(); }
+$('#pins').onclick = async e => { const d = e.target.dataset.d; if (!d) return; const [k, i] = d.split(':'); PINS[k].splice(+i, 1); await savePins(); };
+const tparse = s => { s = s.trim(); if (!s) return null; if (s.includes(':')) { const [m, x] = s.split(':'); return +m * 60 + +x; } return +s; };
+$('#p_add').onclick = async () => {
+  const clip = $('#p_clip').value.trim(); if (!clip) return toast('Enter a clip name or part of it');
+  const a = tparse($('#p_start').value), b = tparse($('#p_end').value);
+  PINS[$('#p_kind').value].push({clip, start: a, end: a == null ? null : (b ?? a + 6)});
+  await savePins(); $('#p_clip').value = $('#p_start').value = $('#p_end').value = '';
+};
+$('#p_clear').onclick = async () => { PINS = {include: [], exclude: []}; await savePins(); };
+$('#p_build').onclick = () => startJob('build');
+
+/* ------------------------------------------------------------------ init */
+(async function init() {
+  try {
+    const st = await api('/api/state');
+    S = st.settings; CFG = st.config; ENV = st.env; S.overrides = S.overrides || {};
+    $('#c_cwd').textContent = st.cwd;
+    const e = $('#c_env'); e.className = 'chip ' + (ENV.ffmpeg ? 'ok' : 'bad');
+    e.textContent = !ENV.ffmpeg ? 'ffmpeg missing!' : `ffmpeg ✓ · ${ENV.cuda ? 'GPU ' + ENV.cuda : 'CPU only'}${ENV.nvenc ? ' · NVENC' : ''}`;
+    bindSimple(); buildForm();
+    const j = await api('/api/job'); renderJob(j); since = 0; if (j.state && j.state !== 'idle') poll();
+    go((location.hash || '').slice(1) && TABS.some(t => t[0] === location.hash.slice(1)) ? location.hash.slice(1) : (S.footage ? 'run' : 'project'));
+  } catch (err) { document.body.innerHTML = `<main><div class="card"><h2>Cannot reach dronecut</h2><p>${esc(err.message)}</p><p class="hint">Open the exact URL printed by <code>dronecut ui</code> (it contains a one-time token).</p></div></main>`; }
+})();
+</script>
+</body>
+</html>

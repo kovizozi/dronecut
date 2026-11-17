@@ -230,6 +230,7 @@ def build(cfg: Cfg, music: str, duration: float, res: int | None, vlm: bool, see
         "timings": dict(TIMINGS),
         "failed": an.failed,
         "telemetry": hud.summaries(sel.cuts) if hud else None,
+        "pins": pins.to_dict() if pins else {"include": [], "exclude": []},
     })
     with stage("report"):
         rep = report.write_report(build_json, cache, out / "report.html")

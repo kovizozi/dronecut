@@ -37,3 +37,5 @@ testmedia/
 test_media/
 config.yaml
 .claude/
+ui_settings.json
+must_have.json

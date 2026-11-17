@@ -130,6 +130,18 @@ def analyze_track(path: str | Path, cfg: Cfg, cache: Path | None = None) -> Trac
     return tr
 
 
+def cached_info(path: str | Path, cache: Path) -> dict | None:
+    """BPM / duration of an already analysed track (None if it has not been analysed yet)."""
+    try:
+        cf = cache / "music" / f"{file_key(path)}.npz"
+        if not cf.exists():
+            return None
+        with np.load(cf) as z:
+            return {"bpm": float(z["bpm"]), "duration": float(z["duration"])}
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def pick_auto(music_dir: str | Path, target: float, cfg: Cfg, cache: Path | None, seed: int = 0) -> Path:
     """Choose a track from a folder: long enough for the target and tempo inside the preferred range."""
     files = sorted(f for f in Path(music_dir).rglob("*") if f.suffix.lower() in AUDIO_EXTS)

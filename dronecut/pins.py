@@ -37,6 +37,12 @@ class Pins:
     def __bool__(self) -> bool:
         return bool(self.include or self.exclude)
 
+    def to_dict(self) -> dict:
+        def conv(items: list[Pin]) -> list[dict]:
+            return [{"clip": p.clip, "start": p.start, "end": p.end} for p in items]
+
+        return {"include": conv(self.include), "exclude": conv(self.exclude)}
+
 
 def _t(s: str) -> float:
     s = s.strip()
