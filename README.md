@@ -89,6 +89,23 @@ dronecut clean-cache
 `--music auto` picks from `paths.music_dir` (long enough, tempo in `music.auto_prefer_bpm`). `--seed` makes the whole
 run deterministic. `--config path.yaml` selects a config (default: `./config.yaml`); start from `config.example.yaml`.
 
+## Measured performance
+
+Ryzen 5 7600, 32 GB, RTX 3060 12 GB, Windows 11, ffmpeg 9 with NVENC. Input: 16 DJI Neo clips, 18.3 min
+(mixed 3840x2160 @ 29.97 and 1920x1080 @ 59.94, HEVC); output: 148.6 s 1080p, 41 cuts on a 105 BPM track.
+
+| stage | cold run | warm (cached) |
+|---|---|---|
+| probe | 1 s | 0 s |
+| 720p proxies (NVENC, 4 parallel) | 207 s | 0 s |
+| scene detection + technical scoring (4 processes) | 66 s | 0.1 s |
+| semantic: SigLIP so400m + YOLOv8n (GPU) | 64 s (+ one-time model download) | 2 s |
+| VLM, 40 candidates (Qwen2.5-VL-7B 4-bit) | ~11 min incl. ~16 GB first download | 0 s |
+| music analysis (`--music auto`, 25 tracks) | 61 s | 0.1 s |
+| selection | 1 s | 1 s |
+| render 148.6 s from the 4K/1080p originals (NVENC) | 60-80 s | |
+| FCPXML + report.html | 12 s | |
+
 ## Tuning with real footage
 
 1. Run `dronecut build ...` then open `report.html`. Rejected windows are listed with their reason.
