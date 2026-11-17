@@ -1,0 +1,98 @@
+# dronecut configuration. Copy to config.yaml (git-ignored) and edit; every key is optional.
+# Anything not listed falls back to the built-in default (see dronecut/config.py).
+
+paths:
+  cache_dir: .dronecut_cache      # analysis cache (proxies, embeddings...). Safe to delete: `dronecut clean-cache`
+  output_dir: output
+  music_dir: null                 # e.g. C:/MUSIC  -> enables `--music auto`
+  model_cache_dir: null           # null = per-user cache (%LOCALAPPDATA%/dronecut/models), never inside the repo
+
+ingest:
+  proxy_height: 720               # analysis runs on proxies, the final render uses the originals
+  proxy_fps: 10
+  workers: 4                      # parallel ffmpeg proxy jobs
+  prefer_nvenc: true
+
+segment:
+  min_window_s: 2.0               # candidate windows are 2-6 s
+  max_window_s: 6.0
+  window_s: 4.0                   # sliding-window length for long continuous shots
+  overlap: 0.5
+  content_threshold: 27.0         # PySceneDetect ContentDetector (lower = more cuts)
+  adaptive_threshold: 3.0
+
+tech:                             # --- hard-reject thresholds: tune these first with real footage ---
+  workers: 4
+  min_sharpness_abs: 12.0         # Laplacian variance floor
+  min_sharpness_rel: 0.30         # ...or < 30 % of the footage's 75th-percentile sharpness
+  luma_min: 35                    # mean brightness (0-255) below = underexposed
+  luma_max: 215
+  shake_max: 2.2                  # px of residual camera jitter (at 320 px width); raise if good shots get rejected
+  jerk_max: 14.0
+  motion_min: 1.5                 # px/s; below = static / hovering
+  motion_max: 260.0               # above = chaotic
+  zoom_rate_max: 0.45             # rapid scale change
+  edge_s: 8.0                     # takeoff/landing zone at the start/end of each clip
+  edge_zoom_rate: 0.18
+  min_altitude_m: 1.5             # needs the DJI .SRT sidecar; windows flown below this are dropped
+  sky_max: 0.92
+  occlusion_max: 0.35
+  weights: {sharpness: 0.30, exposure: 0.20, stability: 0.30, motion: 0.20}
+
+semantic:
+  backend: siglip                 # siglip | mock
+  model: google/siglip-so400m-patch14-384
+  sample_fps: 1.0
+  person_backend: yolo            # yolo | hog | none
+  person_boost: 0.15
+  positive_prompts:
+    - people waving at the camera
+    - family outdoors
+    - aerial view of landscape
+    - drone orbiting around a person
+    - children playing
+  negative_prompts:
+    - blurry image
+    - ground close-up
+    - sky only
+    - indoor ceiling
+  wide_prompts:                   # used to choose the opening shot
+    - a wide aerial establishing shot of a landscape
+
+vlm:                              # only used with --vlm
+  model: Qwen/Qwen2.5-VL-7B-Instruct
+  fallback_model: vikhyatk/moondream2
+  top_k: 40
+  weight: 0.25                    # share of the VLM score in the final ranking
+
+select:
+  weights: {technical: 0.5, semantic: 0.5}
+  min_gap_s: 6.0                  # min time between picks from the same clip
+  clusters: 8                     # visual diversity clusters (k-means on embeddings)
+  max_per_cluster_frac: 0.35
+  open_with_wide: true
+  close_with_pullaway: true
+
+music:
+  bpm_range: [75, 165]            # tempo is folded into this range (fixes half/double-time errors)
+  beats_per_bar: 4
+  bars_high: 1                    # bars per shot in high-energy sections (shorter cuts)
+  bars_mid: 2
+  bars_low: 3                     # longer shots in calm sections
+  fade_out_s: 2.5
+  auto_prefer_bpm: [95, 130]      # for --music auto
+
+render:
+  resolution: 1080                # or 2160 (--res)
+  fps: null                       # null = most common source fps
+  crossfade_s: 0.0                # 0 = hard cuts; 0.4 = soft dissolves centred on the beat
+  slowmo_factor: 1.0              # 0.8 = gentle slow-down of smooth orbit-like shots
+  normalize_exposure: true
+  white_balance: true
+  target_luma: 118
+  lut: null                       # path to a .cube LUT, e.g. C:/luts/neo_rec709.cube
+  mix_source_audio: false         # duck the music under the original audio (only with crossfade_s: 0)
+  source_audio_gain: 0.35
+  nvenc: auto                     # auto | on | off
+  codec: h264                     # h264 | hevc
+  crf: 18                         # quality (cq for NVENC)

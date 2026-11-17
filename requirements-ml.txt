@@ -1,0 +1,13 @@
+# Optional ML stack (semantic scoring, person detection, --vlm). Install AFTER requirements.txt.
+# PyTorch with CUDA 12.4 wheels (RTX 30/40 series). For CPU-only use: --index-url https://download.pytorch.org/whl/cpu
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0+cu124
+torchvision==0.21.0+cu124
+transformers==5.23.0
+accelerate==1.16.0
+sentencepiece==0.2.3
+protobuf==7.36.2
+ultralytics==8.4.215
+# --vlm only
+bitsandbytes==0.50.2
+qwen-vl-utils==0.0.14

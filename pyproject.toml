@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dronecut"
+version = "0.1.0"
+description = "Local, offline automatic highlight editor for drone footage, cut to the beat."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+  "numpy>=1.26,<3",
+  "opencv-python-headless>=4.9",
+  "scenedetect>=0.6.4",
+  "librosa>=0.10.2",
+  "soundfile>=0.12",
+  "scikit-learn>=1.4",
+  "pyyaml>=6",
+  "rich>=13",
+  "pillow>=10",
+]
+
+[project.optional-dependencies]
+# Semantic scoring / VLM. Install PyTorch with CUDA separately (see README).
+ml = [
+  "torch>=2.2",
+  "transformers>=4.45",
+  "sentencepiece",
+  "protobuf",
+  "accelerate",
+  "ultralytics>=8.2",
+]
+vlm = ["bitsandbytes>=0.43", "qwen-vl-utils"]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+dronecut = "dronecut.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["dronecut*"]
+
+[tool.setuptools.package-data]
+dronecut = ["py.typed"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["B008", "E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["gpu: needs the full ML models (slow, skipped in CI)"]
