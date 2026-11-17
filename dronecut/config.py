@@ -25,7 +25,7 @@ DEFAULTS: dict[str, Any] = {
     "segment": {
         "min_window_s": 2.0,
         "max_window_s": 6.0,
-        "window_s": 4.0,  # sliding window length for long shots
+        "window_s": 6.0,  # sliding window length for long shots
         "overlap": 0.5,  # fraction of overlap between sliding windows
         "content_threshold": 27.0,
         "adaptive_threshold": 3.0,
@@ -38,7 +38,7 @@ DEFAULTS: dict[str, Any] = {
         "sharp_width": 640,
         # hard rejects (applied at selection time, so they can be tuned without re-analysing)
         "min_sharpness_abs": 12.0,
-        "min_sharpness_rel": 0.30,  # fraction of the global median sharpness
+        "min_sharpness_rel": 0.25,  # fraction of the global median sharpness
         "luma_min": 35.0,
         "luma_max": 215.0,
         "clip_high_max": 0.30,

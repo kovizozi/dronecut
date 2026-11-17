@@ -29,6 +29,8 @@ def setup_logging(verbose: bool = False) -> None:
         handlers=[RichHandler(console=console, show_path=False, markup=True)],
         force=True,
     )
+    for noisy in ("httpx", "httpcore", "huggingface_hub", "urllib3", "filelock", "transformers"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
 @contextmanager

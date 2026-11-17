@@ -92,10 +92,10 @@ def _pick_candidates(ok: list[dict], need_s: float, cfg: Cfg, rng: random.Random
                 continue
             picked.append(w)
             per_cluster[w["cluster"]] = per_cluster.get(w["cluster"], 0) + 1
-            dur_sum += min(w["end"] - w["start"], bar_dur * 3)
-            if dur_sum >= need_s * 1.25:
+            dur_sum += min(int(np.floor((w["end"] - w["start"]) / bar_dur + 1e-6)), 2) * bar_dur
+            if dur_sum >= need_s * 1.3:
                 break
-        if dur_sum >= need_s * 1.25:
+        if dur_sum >= need_s * 1.3:
             break
     return picked
 

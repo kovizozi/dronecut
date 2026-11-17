@@ -68,6 +68,13 @@ class MockEmbedder:
         pass
 
 
+def _tensor(x):
+    """transformers 5 returns a ModelOutput (pooler_output) where 4.x returned a tensor."""
+    if hasattr(x, "pooler_output") and x.pooler_output is not None:
+        return x.pooler_output
+    return x
+
+
 class SigLIPEmbedder:
     name = "siglip"
 
@@ -82,7 +89,7 @@ class SigLIPEmbedder:
         dtype = torch.float16 if self.device == "cuda" else torch.float32
         log.info("loading %s on %s (cache: %s)", model_id, self.device, cache)
         self.processor = AutoProcessor.from_pretrained(model_id, cache_dir=str(cache))
-        self.model = AutoModel.from_pretrained(model_id, cache_dir=str(cache), torch_dtype=dtype).to(self.device).eval()
+        self.model = AutoModel.from_pretrained(model_id, cache_dir=str(cache), dtype=dtype).to(self.device).eval()
         self.bs = int(cfg.semantic.batch_size)
 
     def embed_images(self, frames: list[np.ndarray]) -> np.ndarray:
@@ -94,7 +101,7 @@ class SigLIPEmbedder:
             imgs = [Image.fromarray(cv2.cvtColor(f, cv2.COLOR_BGR2RGB)) for f in frames[i : i + self.bs]]
             px = self.processor(images=imgs, return_tensors="pt")["pixel_values"].to(self.device, self.model.dtype)
             with torch.no_grad():
-                e = self.model.get_image_features(pixel_values=px)
+                e = _tensor(self.model.get_image_features(pixel_values=px))
             e = torch.nn.functional.normalize(e.float(), dim=-1)
             outs.append(e.cpu().numpy())
         return np.concatenate(outs) if outs else np.zeros((0, 1), np.float32)
@@ -103,7 +110,7 @@ class SigLIPEmbedder:
         torch = self.torch
         inp = self.processor(text=prompts, padding="max_length", max_length=64, return_tensors="pt").to(self.device)
         with torch.no_grad():
-            e = self.model.get_text_features(**inp)
+            e = _tensor(self.model.get_text_features(**inp))
         return torch.nn.functional.normalize(e.float(), dim=-1).cpu().numpy()
 
     def close(self) -> None:
@@ -180,11 +187,11 @@ def _cuda() -> bool:
 # stage
 
 
-def _text_sims(emb: Any, cfg: Cfg, cache: Path, fast: bool, model_name: str) -> dict[str, np.ndarray]:
+def _text_sims(emb: Any, cfg: Cfg, cache: Path, backend: str, model_name: str) -> dict[str, np.ndarray]:
     s = cfg.semantic
     groups = {"pos": s.positive_prompts, "neg": s.negative_prompts, "wide": s.wide_prompts}
     ph = params_hash({"m": model_name, "g": groups})
-    f = cache / "text" / f"{emb.name}_{ph}.npz"
+    f = cache / "text" / f"{backend}_{ph}.npz"
     if f.exists():
         with np.load(f) as z:
             return {k: z[k] for k in z.files}
@@ -231,7 +238,7 @@ def run(an, proxies: dict[str, Path], cfg: Cfg, cache: Path, fast: bool = False)
             ph_t = params_hash({"m": model_name, "g": {"pos": s.positive_prompts, "neg": s.negative_prompts, "wide": s.wide_prompts}})
             if not (probe_dir / f"{backend}_{ph_t}.npz").exists():
                 emb = make_embedder(cfg, fast)
-        tsims = _text_sims(emb, cfg, cache, fast, model_name) if emb is not None else _text_sims(None, cfg, cache, fast, model_name)
+        tsims = _text_sims(emb, cfg, cache, backend, model_name)
     if emb is not None:
         emb.close()
     del det

@@ -134,7 +134,7 @@ def global_stats(feats: list[dict[str, float]]) -> dict[str, float]:
     if not feats:
         return {"sharp_ref": 1.0}
     sharp = np.array([f["sharp"] for f in feats])
-    return {"sharp_ref": float(np.percentile(sharp, 75)), "sharp_median": float(np.median(sharp))}
+    return {"sharp_ref": float(np.median(sharp)), "sharp_p75": float(np.percentile(sharp, 75))}
 
 
 def _bump(x: float, lo: float, hi: float) -> float:
@@ -179,7 +179,7 @@ def evaluate(f: dict[str, float], gs: dict[str, float], tech: dict[str, Any]) ->
     if f["occl"] > tech["occlusion_max"]:
         why.append("occluded")
 
-    s_sharp = float(np.clip(f["sharp"] / ref, 0, 1) ** 0.5)
+    s_sharp = float(np.clip(f["sharp"] / (1.5 * ref), 0, 1) ** 0.5)
     exp_pen = abs(f["luma"] - 120.0) / 120.0 + 1.5 * f["clip_high"] + 0.8 * f["clip_low"]
     s_exp = float(np.clip(1.0 - exp_pen, 0, 1))
     s_stab = float(np.exp(-f["shake"] / max(tech["shake_max"], 1e-6)) * np.exp(-f["jerk"] / max(tech["jerk_max"] * 2, 1e-6)))
