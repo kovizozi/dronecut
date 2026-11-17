@@ -89,6 +89,26 @@ dronecut clean-cache
 `--music auto` picks from `paths.music_dir` (long enough, tempo in `music.auto_prefer_bpm`). `--seed` makes the whole
 run deterministic. `--config path.yaml` selects a config (default: `./config.yaml`); start from `config.example.yaml`.
 
+## Pick the parts you must have
+
+`report.html` has a ⭐ *must have* and a 🚫 *never* button on every thumbnail. Click, then **Download must_have.json**,
+save it next to `config.yaml` and re-run `dronecut build ...` (it is picked up automatically, or pass `--must-have FILE`).
+Must-have parts override the quality filter and are placed on the beat; if the music is too short they win over ordinary
+shots. For any time range, without the report:
+
+```
+dronecut build --music auto --include "0010@1:05-1:12" --include "DJI_20261004142928_0015_D.MP4@20-26" --exclude 0013
+```
+The clip is any part of the file name; times are seconds or `m:ss`.
+
+## Telemetry HUD (`--hud`)
+
+With the DJI `.SRT` files next to the clips, `dronecut build --hud` overlays a glass panel with **speed, altitude, climb
+rate, distance from take-off, heading, time of day** and a **live flight-path mini-map** (speed/heading/distance are
+derived from the GPS track, the SRT has no speed field). It fades in and out at each cut and is composited in the same
+ffmpeg pass. Options under `hud:` in `config.yaml`: `style` (`full`/`minimal`), `units` (`metric`/`imperial`),
+`position`, `scale`, `accent` colour, `show_map`. Clips without a GPS fix get no HUD.
+
 ## Measured performance
 
 Ryzen 5 7600, 32 GB, RTX 3060 12 GB, Windows 11, ffmpeg 9 with NVENC. Input: 16 DJI Neo clips, 18.3 min

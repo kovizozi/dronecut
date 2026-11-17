@@ -130,6 +130,38 @@ def make_music(path: Path, bpm: float = 120.0, dur: float = 70.0, sr: int = 4410
     sf.write(path, y, sr)
 
 
+def write_srt(path: Path, dur: float, fps: int = FPS, east: float = 8.0, north: float = 3.0, climb: float = 1.0) -> None:
+    """DJI-style per-frame .SRT: flight east at `east` m/s with a gentle north wiggle, climbing `climb` m/s."""
+    import math
+
+    lat0, lon0 = 46.762252, 21.084625
+    out = []
+    n = int(dur * fps)
+    for i in range(n):
+        t = i / fps
+        x = east * t
+        y = north * 3.0 * (1 - math.cos(0.33 * t))
+        lat = lat0 + y / 111320.0
+        lon = lon0 + x / (111320.0 * math.cos(math.radians(lat0)))
+        a, b = i * 1000 // fps, (i + 1) * 1000 // fps
+
+        def ts(ms: int) -> str:
+            return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
+
+        out.append(
+            chr(10).join([
+                str(i + 1),
+                f"{ts(a)} --> {ts(b)}",
+                f'<font size="28">FrameCnt: {i + 1}, DiffTime: 33ms',
+                f"2026-10-04 14:02:{7 + int(t):02d}.{int(t % 1 * 1000):03d}",
+                f"[iso: 100] [shutter: 1/1250.0] [fnum: 2.8] [latitude: {lat:.6f}] [longitude: {lon:.6f}] "
+                f"[rel_alt: {0.8 + climb * t:.3f} abs_alt: {-38.7 + climb * t:.3f}] </font>",
+                "",
+            ])
+        )
+    path.write_text(chr(10).join(out), encoding="utf-8")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("out_dir")
@@ -147,7 +179,9 @@ def main() -> None:
         return round(x * q, 2)
 
     pan_clip(land, out / "good_pan_1080.mp4", 1920, 1080, d(14), audio=True)
+    write_srt(out / "good_pan_1080.SRT", d(14))
     pan_clip(land, out / "good_pan_4k.mp4", 3840, 2160, d(10), x0=100, y0=150, vx=150, vy=40)
+    write_srt(out / "good_pan_4k.SRT", d(10), east=12.0, north=-2.0, climb=-0.5)
     # pull-away: crop a shrinking-then-scaled window (zoom out) -> negative divergence
     _ff([*_img_in(land, d(10)), "-vf",
          LOOP + f"crop=3200:1800:1600:800,zoompan=z='max(1.0,2.0-{1.0/(d(10)*FPS):.6f}*on)':"

@@ -9,6 +9,8 @@ import numpy as np
 from . import score_semantic, score_tech
 from .config import Cfg
 from .music import MusicPlan
+from .pins import Pins, apply_pins
+from .utils import log
 
 
 @dataclass
@@ -29,8 +31,11 @@ class Selection:
     candidates: list[dict] = field(default_factory=list)
 
 
-def score_windows(windows: list[dict], cfg: Cfg) -> tuple[list[dict], list[dict]]:
-    """Attach tech/semantic/combined scores and rejection reasons. Returns (accepted, rejected)."""
+def score_windows(windows: list[dict], cfg: Cfg, pins: Pins | None = None) -> tuple[list[dict], list[dict]]:
+    """Attach tech/semantic/combined scores and rejection reasons. Returns (accepted, rejected).
+
+    ``pins`` (must-have / never-use parts) override the quality filter: pinned windows are always accepted.
+    """
     gs = score_tech.global_stats([w["feat"] for w in windows])
     score_semantic.semantic_scores(windows, cfg)
     wt = cfg.select.weights
@@ -48,12 +53,19 @@ def score_windows(windows: list[dict], cfg: Cfg) -> tuple[list[dict], list[dict]
         if w.get("vlm") is not None:
             base = (1 - vlm_w) * base + vlm_w * float(w["vlm"])
         w["score"] = float(base)
-        (bad if why else ok).append(w)
+    if pins:
+        apply_pins(windows, pins, float(cfg.segment.max_window_s))
+    for w in windows:
+        (bad if w["reasons"] else ok).append(w)
     return ok, bad
 
 
-def _pick_candidates(ok: list[dict], need_s: float, cfg: Cfg, rng: random.Random, bar_dur: float) -> list[dict]:
-    """Greedy by score with cluster limits and a min gap between picks of the same clip."""
+def _pick_candidates(ok: list[dict], need_s: float, cfg: Cfg, rng: random.Random, bar_dur: float,
+                     forced: list[dict] | None = None) -> list[dict]:
+    """Greedy by score with cluster limits and a min gap between picks of the same clip.
+
+    ``forced`` (user-pinned) windows are taken first and are not subject to any of the limits.
+    """
     from sklearn.cluster import KMeans
 
     pool = [w for w in ok if w["end"] - w["start"] >= bar_dur - 1e-6]
@@ -74,6 +86,12 @@ def _pick_candidates(ok: list[dict], need_s: float, cfg: Cfg, rng: random.Random
     picked: list[dict] = []
     per_cluster: dict[int, int] = {}
     dur_sum = 0.0
+    pool_ids = {p["id"] for p in pool}
+    for w in forced or []:
+        if w["id"] in pool_ids:
+            picked.append(w)
+            per_cluster[w["cluster"]] = per_cluster.get(w["cluster"], 0) + 1
+            dur_sum += min(int(np.floor((w["end"] - w["start"]) / bar_dur + 1e-6)), 2) * bar_dur
 
     def ok_gap(w: dict) -> bool:
         for p in picked:
@@ -119,14 +137,9 @@ def _order_narrative(picks: list[dict], cfg: Cfg) -> list[dict]:
     return ([opener] if opener else []) + middle + ([closer] if closer else [])
 
 
-def build_cuts(windows: list[dict], plan: MusicPlan, cfg: Cfg, seed: int = 0) -> Selection:
-    """Pick windows, order them, and lay them on the bar grid of the music plan (cuts land on downbeats)."""
-    rng = random.Random(seed)
-    ok, bad = score_windows(windows, cfg)
-    sel = Selection(rejected=bad, candidates=ok)
-    bar_dur = float(np.median(np.diff(plan.bar_times)))
-    picks = _pick_candidates(ok, plan.duration, cfg, rng, bar_dur)
-    ordered = _order_narrative(picks, cfg)
+def _layout(ordered: list[dict], plan: MusicPlan, cfg: Cfg, bar_dur: float) -> list[Cut]:
+    """Lay the ordered windows on the bar grid of the music plan (every cut starts and ends on a downbeat)."""
+    cuts: list[Cut] = []
     bar = 0
     t_out = 0.0
     slow = float(cfg.render.slowmo_factor)
@@ -149,8 +162,44 @@ def build_cuts(windows: list[dict], plan: MusicPlan, cfg: Cfg, seed: int = 0) ->
             if src_dur > wl + 1e-6:
                 continue
         src_start = w["start"] + (wl - src_dur) / 2.0
-        sel.cuts.append(Cut(w, round(src_start, 3), round(src_dur, 4), round(t_out, 4), round(out_dur, 4), speed, nb))
+        if w.get("pinned") and w.get("pin_range"):  # centre the cut on the part the user asked for
+            a, b = w["pin_range"]
+            src_start = min(max((a + b) / 2.0 - src_dur / 2.0, w["start"]), w["end"] - src_dur)
+        cuts.append(Cut(w, round(src_start, 3), round(src_dur, 4), round(t_out, 4), round(out_dur, 4), speed, nb))
         t_out += out_dur
         bar += nb
-    # footage ran out before the music did: end on the last used bar boundary (still beat aligned)
+    return cuts
+
+
+def build_cuts(windows: list[dict], plan: MusicPlan, cfg: Cfg, seed: int = 0, pins: Pins | None = None) -> Selection:
+    """Pick windows, order them, and lay them on the bar grid of the music plan (cuts land on downbeats)."""
+    rng = random.Random(seed)
+    ok, bad = score_windows(windows, cfg, pins)
+    sel = Selection(rejected=bad, candidates=ok)
+    bar_dur = float(np.median(np.diff(plan.bar_times)))
+    forced = [w for w in ok if w.get("pinned")]
+    too_short = [w for w in forced if w["end"] - w["start"] < bar_dur - 1e-6]
+    for w in too_short:
+        log.warning("must-have %s %.1f-%.1fs is shorter than one bar (%.1fs) and cannot be placed on the beat",
+                    w["clip_name"], w["start"], w["end"], bar_dur)
+    forced = [w for w in forced if w not in too_short]
+    picks = _pick_candidates(ok, plan.duration, cfg, rng, bar_dur, forced)
+    ordered = _order_narrative(picks, cfg)
+    cuts = _layout(ordered, plan, cfg, bar_dur)
+    # must-haves win over everything else: if the bars ran out, drop the weakest ordinary shots and re-lay
+    while True:
+        used = {c.window["id"] for c in cuts}
+        missing = [w for w in forced if w["id"] not in used]
+        spare = [w for w in ordered if w["id"] in used and not w.get("pinned")]
+        if not missing or not spare:
+            break
+        drop = min(spare, key=lambda w: (w["score"], w["id"]))
+        ordered = [w for w in ordered if w is not drop]
+        cuts = _layout(ordered, plan, cfg, bar_dur)
+    used = {c.window["id"] for c in cuts}
+    lost = [w for w in forced if w["id"] not in used]
+    if lost:
+        log.warning("%d must-have part(s) did not fit into %.0fs of music - raise --duration: %s", len(lost), plan.duration,
+                    ", ".join(f"{w['clip_name']}@{w['start']:.0f}s" for w in lost[:5]))
+    sel.cuts = cuts
     return sel

@@ -112,6 +112,17 @@ DEFAULTS: dict[str, Any] = {
         "codec": "h264",  # h264 | hevc
         "crf": 18,
     },
+    "hud": {  # telemetry overlay from the DJI .SRT files (speed, altitude, climb, distance, heading, clock, map)
+        "enabled": False,  # or pass --hud
+        "style": "full",  # full | minimal
+        "units": "metric",  # metric | imperial
+        "position": "bottom-left",  # bottom-left | bottom-right | top-left | top-right
+        "scale": 1.0,
+        "accent": "#FFB800",
+        "fade_s": 0.35,
+        "speed_max_kmh": 60,  # full scale of the speed bar (grows automatically for fast clips)
+        "show_map": True,
+    },
 }
 
 

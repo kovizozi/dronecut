@@ -252,3 +252,84 @@ def test_low_altitude_kept_by_default_and_droppable():
     assert len(ok) == 2 and not bad
     ok, bad = select.score_windows(ws, load_config(None, {"tech": {"min_altitude_m": 1.5}}))
     assert len(bad) == 2 and "ground_level" in bad[0]["reasons"]
+
+
+# ---------------------------------------------------------------- must-have / never-use pins
+def _good_feat():
+    return {"sharp": 100, "luma": 120, "luma_p5": 90, "clip_low": 0, "clip_high": 0, "sky": 0, "occl": 0, "shake": 0.1,
+            "jerk": 0.5, "motion": 30, "chaos": 1, "zoom": 0.0, "zoom_abs": 0.0, "dist_start": 30, "dist_end": 30}
+
+
+def _plan(n_bars=12):
+    from dronecut.music import Track
+
+    beats = np.arange(0, n_bars * 2 + 4, 0.5)
+    tr = Track("x.wav", n_bars * 2 + 4.0, 120.0, beats, beats[::4], np.arange(0, 100, 0.1), np.full(1000, 0.5))
+    return music.make_plan(tr, n_bars * 2.0, load_config())
+
+
+def test_parse_pin_specs():
+    from dronecut import pins
+
+    p = pins.parse_spec("0010@1:05-1:12.5")
+    assert (p.clip, p.start, p.end) == ("0010", 65.0, 72.5)
+    assert pins.parse_spec("0010@45").end == 51.0
+    assert pins.parse_spec("0010").start is None
+    for bad in ("@5-6", "x@9-3", "x@abc"):
+        with pytest.raises(ValueError):
+            pins.parse_spec(bad)
+
+
+def test_pinned_part_overrides_quality_filter_and_is_used():
+    from dronecut import pins
+
+    cfg = load_config()
+    ws = _fake_windows(3, 8)
+    for w in ws:
+        w["feat"] = _good_feat()
+    bad = next(w for w in ws if w["clip_name"] == "c1.mp4" and w["start"] == 9.0)
+    bad["feat"] = {**_good_feat(), "shake": 9.0, "sharp": 1.0}  # would be rejected (shaky + blurry)
+    bad["score"] = 0.01
+    plan = _plan(12)
+    sel = select.build_cuts(ws, plan, cfg, seed=1, pins=pins.build_pins(None, ["c1@9.5-12"], []))
+    assert any(c.window["id"] == bad["id"] for c in sel.cuts)
+    c = next(c for c in sel.cuts if c.window["id"] == bad["id"])
+    assert bad["pinned"] and "shaky" in bad["overridden"] and not bad["reasons"]
+    assert c.src_start <= 10.75 <= c.src_start + c.src_dur  # the cut is centred on the requested part
+    # without the pin the same window is rejected
+    sel2 = select.build_cuts(ws, plan, cfg, seed=1)
+    assert all(c.window["id"] != bad["id"] for c in sel2.cuts) and "shaky" in bad["reasons"]
+
+
+def test_excluded_part_never_used_and_pins_win_when_music_is_short():
+    from dronecut import pins
+
+    cfg = load_config()
+    ws = _fake_windows(3, 8)
+    for w in ws:
+        w["feat"] = _good_feat()
+    plan = _plan(4)  # only 4 bars: far fewer slots than windows
+    want = [w for w in ws if w["clip_name"] == "c2.mp4" and w["start"] in (0.0, 21.0)]
+    spec = [f"c2@{w['start']}-{w['end']}" for w in want]
+    sel = select.build_cuts(ws, plan, cfg, seed=2, pins=pins.build_pins(None, spec, ["c0"]))
+    used = {c.window["id"] for c in sel.cuts}
+    assert all(w["id"] in used for w in want)  # all must-haves made it despite the short music
+    assert not any(c.window["clip_name"] == "c0.mp4" for c in sel.cuts)  # excluded clip is absent
+    for c in sel.cuts:  # still on the bar grid
+        assert np.min(np.abs(plan.bar_times - (plan.start + c.out_start))) < 1e-3
+
+
+def test_pins_file_roundtrip_and_end_to_end_include(media, music_file, cfg, tmp_path):
+    from dronecut import pins
+
+    f = tmp_path / "must_have.json"
+    f.write_text(json.dumps({"include": [{"clip": "junk_blur.mp4", "start": 0.5, "end": 4.5}], "exclude": []}))
+    p = pins.build_pins(f, [], [])
+    assert p.include[0].clip == "junk_blur.mp4"
+    r = pipeline.build(cfg, str(music_file), 30.0, 270, False, 5, tmp_path / "out", footage=media, fast=True, pins=p)
+    used = [c.window["clip_name"] for c in r["selection"].cuts]
+    assert "junk_blur.mp4" in used  # the blurry clip is in the edit only because the user asked for it
+    data = json.loads((tmp_path / "out" / "build.json").read_text())
+    assert any(c["pinned"] for c in data["cuts"])
+    page = (tmp_path / "out" / "report.html").read_text(encoding="utf-8")
+    assert "Download must_have.json" in page and 'data-state="in"' in page

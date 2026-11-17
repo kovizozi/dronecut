@@ -26,6 +26,7 @@ class ClipInfo:
     rotation: int = 0
     pix_fmt: str = ""
     srt: list[dict] = field(default_factory=list)  # sparse telemetry samples
+    srt_path: str = ""
     error: str = ""
 
     def to_dict(self) -> dict:
@@ -111,6 +112,7 @@ def probe_file(path: str | Path) -> ClipInfo:
     for ext in (".SRT", ".srt"):
         sc = p.with_suffix(ext)
         if sc.exists():
+            info.srt_path = str(sc.resolve())
             info.srt = parse_srt_telemetry(sc)
             if info.srt:
                 log.debug("telemetry: %d samples from %s", len(info.srt), sc.name)

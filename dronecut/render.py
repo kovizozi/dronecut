@@ -6,9 +6,11 @@ locked to the music grid over the whole edit (no drift, also for 29.97 fps mater
 from __future__ import annotations
 
 import math
+import os
 from collections import Counter
 from dataclasses import dataclass
 from fractions import Fraction
+from functools import lru_cache
 from pathlib import Path
 
 from .config import Cfg
@@ -76,7 +78,8 @@ def _grade(w: dict, cfg: Cfg) -> str:
     return ",".join(parts)
 
 
-def build_graph(cuts: list[Cut], plan: MusicPlan, clips_by_path: dict, cfg: Cfg, fps: Fraction, size: tuple[int, int]) -> tuple[str, int, list[str]]:
+def build_graph(cuts: list[Cut], plan: MusicPlan, clips_by_path: dict, cfg: Cfg, fps: Fraction, size: tuple[int, int],
+                final: str = "vout") -> tuple[str, int, list[str]]:
     """Return (filter_complex script, total frames, per-cut input args)."""
     W, H = size
     F = float(fps)
@@ -124,20 +127,28 @@ def build_graph(cuts: list[Cut], plan: MusicPlan, clips_by_path: dict, cfg: Cfg,
             chains.append(f"[{prev}][v{i}]xfade=transition=fade:duration={cf:.4f}:offset={off:.4f}[{out}]")
             acc += seg_frames[i] / F - cf
             prev = out
-        chains.append(f"[{prev}]null[vout]")
+        chains.append(f"[{prev}]null[{final}]")
     else:
-        chains.append("".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[vout]")
+        chains.append("".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[{final}]")
     return ";\n".join(chains), total_frames, []
 
 
+@lru_cache(maxsize=1)
+def _script_flag() -> str:
+    """ffmpeg >= 7 reads a filter script via ``-/filter_complex``; older builds use ``-filter_complex_script``."""
+    cp = run([which("ffmpeg"), "-hide_banner", "-loglevel", "error", "-/filter_complex", os.devnull, "-f", "lavfi", "-i", "nullsrc",
+              "-t", "0.01", "-f", "null", "-"], check=False)
+    return "-filter_complex_script" if "Unrecognized option" in cp.stderr else "-/filter_complex"
+
+
 def render(cuts: list[Cut], plan: MusicPlan, clips_by_path: dict, cfg: Cfg, out_path: Path, res: int | None = None,
-           music_path: str | None = None) -> RenderInfo:
+           music_path: str | None = None, hud=None) -> RenderInfo:
     if not cuts:
         raise SystemExit("nothing to render: no usable cuts were selected")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fps = choose_fps(cuts, clips_by_path, cfg)
     size = out_size(res or cfg.render.resolution)
-    script, total_frames, _ = build_graph(cuts, plan, clips_by_path, cfg, fps, size)
+    script, total_frames, _ = build_graph(cuts, plan, clips_by_path, cfg, fps, size, final="vbase" if hud else "vout")
     total_t = total_frames / float(fps)
     args: list[str] = [which("ffmpeg"), "-y", "-hide_banner", "-loglevel", "error", "-stats"]
     for c in cuts:
@@ -172,22 +183,50 @@ def render(cuts: list[Cut], plan: MusicPlan, clips_by_path: dict, cfg: Cfg, out_
         parts.append("[mus][srcsc]sidechaincompress=threshold=0.04:ratio=5:attack=30:release=500[duck]")
         parts.append("[duck][srcmix]amix=inputs=2:normalize=0:duration=first[aout]")
         audio_graph = ";\n".join(parts)
+    if hud is not None:
+        hud_idx = music_idx + 1
+        scale, ox, oy = hud.overlay_args(*size)
+        args += ["-f", "rawvideo", "-pix_fmt", "rgba", "-video_size", f"{hud.W}x{hud.H}", "-framerate", f"{hud.fps:g}", "-i", "pipe:0"]
+        sc = f"scale=iw*{scale:.4f}:ih*{scale:.4f}:flags=lanczos," if abs(scale - 1.0) > 1e-3 else ""
+        script += f";\n[{hud_idx}:v]{sc}format=rgba[hudv];\n[vbase][hudv]overlay=x={ox}:y={oy}:format=auto:eof_action=repeat[vout]"
     script_path.write_text(script + ";\n" + audio_graph, encoding="utf-8")
     enc = encoder_args(cfg, quality=int(cfg.render.crf))
     tail_args = ["-map", "[vout]", "-map", a_map, *enc, "-r", f"{fps.numerator}/{fps.denominator}", "-c:a", "aac", "-b:a", "192k",
                  "-t", f"{total_t:.4f}", "-movflags", "+faststart", str(out_path)]
     log.info("rendering %d cuts -> %s (%dx%d @ %.3f fps, %.1fs, encoder %s)", len(cuts), out_path.name, *size, float(fps), total_t, enc[1])
+    full = [*args, _script_flag(), str(script_path), *tail_args]
     try:
-        # ffmpeg >= 7 reads a filter script via "-/filter_complex"; older builds use "-filter_complex_script"
-        cp = run([*args, "-/filter_complex", str(script_path), *tail_args], check=False)
-        if cp.returncode != 0 and "Unrecognized option" in cp.stderr:
-            cp = run([*args, "-filter_complex_script", str(script_path), *tail_args], check=False)
-        if cp.returncode != 0:
-            raise RuntimeError("ffmpeg render failed:\n" + "\n".join(cp.stderr.strip().splitlines()[-15:]))
+        if hud is None:
+            cp = run(full, check=False)
+            err = cp.stderr
+            rc = cp.returncode
+        else:
+            err, rc = _run_with_hud(full, hud.frames(cuts, clips_by_path, total_t))
+        if rc != 0:
+            raise RuntimeError("ffmpeg render failed:\n" + "\n".join(err.strip().splitlines()[-15:]))
     finally:
         script_path.unlink(missing_ok=True)
     console.print()
     return RenderInfo(out_path, fps, size[0], size[1], total_t, total_frames, enc[1])
+
+
+def _run_with_hud(cmd: list[str], frames) -> tuple[str, int]:
+    """Run ffmpeg while streaming raw RGBA HUD frames to its stdin; stderr goes to a temp file (no pipe deadlock)."""
+    import subprocess
+    import tempfile
+
+    with tempfile.TemporaryFile() as errf:
+        proc = subprocess.Popen([str(c) for c in cmd], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=errf)
+        try:
+            assert proc.stdin is not None
+            for fr in frames:
+                proc.stdin.write(fr)
+            proc.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass  # ffmpeg exited early; its stderr explains why
+        rc = proc.wait()
+        errf.seek(0)
+        return errf.read().decode("utf-8", "replace"), rc
 
 
 __all__ = ["RenderInfo", "render", "choose_fps", "out_size", "std_fps", "nvenc_available"]

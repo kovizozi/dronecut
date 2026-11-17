@@ -41,6 +41,12 @@ def main(argv: list[str] | None = None) -> int:
     pb.add_argument("--fast", action="store_true")
     pb.add_argument("--footage", help="footage folder (default: the one used by the last `analyze`)")
     pb.add_argument("-o", "--output-dir", default=None)
+    pb.add_argument("--hud", nargs="?", const="full", choices=["full", "minimal"], default=None,
+                    help="overlay flight telemetry from the .SRT files (speed, altitude, distance, heading, map)")
+    pb.add_argument("--must-have", metavar="FILE", help="must_have.json saved from report.html (default: ./must_have.json if present)")
+    pb.add_argument("--include", action="append", default=[], metavar="CLIP@START-END",
+                    help="part that MUST be in the edit, e.g. 0010@45-60 or DJI_..._0010_D.MP4@1:05-1:12 (repeatable)")
+    pb.add_argument("--exclude", action="append", default=[], metavar="CLIP@START-END", help="part to never use (repeatable)")
     _common(pb)
     pr = sub.add_parser("report", help="regenerate report.html from the last build")
     pr.add_argument("-o", "--output-dir", default=None)
@@ -60,7 +66,20 @@ def main(argv: list[str] | None = None) -> int:
             console.print(f"[yellow]failed:[/] {p}: {e}")
     elif a.cmd == "build":
         out = a.output_dir or cfg.paths.output_dir
-        r = pipeline.build(cfg, a.music, a.duration, a.res, a.vlm, a.seed, out, footage=a.footage, fast=a.fast)
+        from . import pins as pins_mod
+
+        if a.hud:
+            cfg["hud"]["enabled"] = True
+            cfg["hud"]["style"] = a.hud
+
+        pf = a.must_have or ("must_have.json" if Path("must_have.json").exists() else None)
+        try:
+            pins = pins_mod.build_pins(pf, a.include, a.exclude)
+        except (ValueError, OSError, KeyError) as e:
+            raise SystemExit(f"cannot read must-have list: {e}") from None
+        if pf:
+            console.print(f"using must-have list {pf}: {len(pins.include)} include, {len(pins.exclude)} exclude")
+        r = pipeline.build(cfg, a.music, a.duration, a.res, a.vlm, a.seed, out, footage=a.footage, fast=a.fast, pins=pins)
         console.print(f"[bold green]done[/]: {r['mp4']}\n  timeline: {r['fcpxml']}\n  report:   {r['report']}")
         console.print("stage timings: " + ", ".join(f"{k} {v:.1f}s" for k, v in TIMINGS.items()))
     elif a.cmd == "report":

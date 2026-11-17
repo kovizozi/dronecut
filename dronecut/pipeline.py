@@ -167,7 +167,7 @@ def _clean_window(w: dict) -> dict:
 
 
 def build(cfg: Cfg, music: str, duration: float, res: int | None, vlm: bool, seed: int, out_dir: str | Path,
-          footage: str | Path | None = None, fast: bool = False, cuts_only: bool = False) -> dict:
+          footage: str | Path | None = None, fast: bool = False, pins=None) -> dict:
     """Analyse (cached), pick music, select, render, export. Returns paths + summary."""
     import random
 
@@ -201,14 +201,20 @@ def build(cfg: Cfg, music: str, duration: float, res: int | None, vlm: bool, see
         plan = music_mod.make_plan(track, duration, cfg)
         log.info("music: %.1f BPM, %d bars (%.1fs) from %.1fs", track.bpm, plan.n_bars, plan.duration, plan.start)
     with stage("select"):
-        sel = select.build_cuts(an.windows, plan, cfg, seed=seed)
+        sel = select.build_cuts(an.windows, plan, cfg, seed=seed, pins=pins)
         log.info("%d accepted / %d rejected windows -> %d cuts", len(sel.candidates), len(sel.rejected), len(sel.cuts))
         if not sel.cuts:
             raise SystemExit("no usable windows survived rejection - check report / loosen thresholds in config.yaml")
     clips = {c.path: c for c in an.clips}
     with stage("render"):
         mp4 = out / "dronecut_highlight.mp4"
-        info = render(sel.cuts, plan, clips, cfg, mp4, res=res, music_path=str(mpath))
+        hud = None
+        if cfg.hud.enabled:
+            from .hud import Hud
+            from .render import choose_fps, out_size
+
+            hud = Hud(cfg, out_size(res or cfg.render.resolution)[1], float(choose_fps(sel.cuts, clips, cfg)))
+        info = render(sel.cuts, plan, clips, cfg, mp4, res=res, music_path=str(mpath), hud=hud)
     with stage("export"):
         fcp = export.write_fcpxml(out / "dronecut_highlight.fcpxml", sel.cuts, plan, clips, info.fps, res or cfg.render.resolution, str(mpath))
         problems = export.validate_fcpxml(fcp)
@@ -219,10 +225,11 @@ def build(cfg: Cfg, music: str, duration: float, res: int | None, vlm: bool, see
         "output": str(mp4), "fcpxml": str(fcp), "duration": info.duration, "seed": seed, "fast": fast,
         "music": {"path": str(mpath), "name": mpath.name, "bpm": track.bpm, "bars": plan.n_bars, "start": plan.start},
         "cuts": [{"window_id": c.window["id"], "src_start": c.src_start, "src_dur": c.src_dur, "out_start": c.out_start,
-                  "out_dur": c.out_dur, "speed": c.speed, "bars": c.bars} for c in sel.cuts],
+                  "out_dur": c.out_dur, "speed": c.speed, "bars": c.bars, "pinned": bool(c.window.get("pinned"))} for c in sel.cuts],
         "windows": [_clean_window(w) for w in an.windows],
         "timings": dict(TIMINGS),
         "failed": an.failed,
+        "telemetry": hud.summaries(sel.cuts) if hud else None,
     })
     with stage("report"):
         rep = report.write_report(build_json, cache, out / "report.html")

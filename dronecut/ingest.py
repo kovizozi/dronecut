@@ -56,7 +56,7 @@ def probe_all(files: list[Path], cache: Path) -> list[ClipInfo]:
         try:
             key = file_key(f)
             pj = cache / key / "probe.json"
-            ph = params_hash("probe-v1")
+            ph = params_hash("probe-v2")
             d = cached_json(pj, ph)
             if d is None:
                 info = probe_file(f)
