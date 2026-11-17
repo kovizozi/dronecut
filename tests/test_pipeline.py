@@ -225,3 +225,19 @@ def test_tech_evaluate_reasons():
     assert "takeoff" in why
     _, why = score_tech.evaluate({**f, "dist_end": 2.0, "zoom": 0.3}, {"sharp_ref": 100.0}, cfg.tech)
     assert "landing" in why
+
+
+def test_config_env_expansion_and_friendly_yaml_error(tmp_path, monkeypatch):
+    monkeypatch.setenv("DC_TEST_DIR", str(tmp_path))
+    good = tmp_path / "c.yaml"
+    good.write_text('paths:\n  model_cache_dir: "%DC_TEST_DIR%/models"\n  music_dir: "$DC_TEST_DIR/music"\n', encoding="utf-8")
+    c = load_config(good)
+    import os
+
+    assert c.paths.model_cache_dir == os.path.expandvars("%DC_TEST_DIR%/models") or str(tmp_path) in c.paths.model_cache_dir
+    assert "%" not in c.paths.music_dir
+    bad = tmp_path / "b.yaml"
+    bad.write_text("paths:\n  model_cache_dir: %LOCALAPPDATA%/x\n", encoding="utf-8")
+    with pytest.raises(SystemExit) as e:
+        load_config(bad)
+    assert "line 2" in str(e.value) and "quote" in str(e.value)

@@ -139,10 +139,27 @@ def load_config(path: str | Path | None = None, overrides: dict | None = None) -
     if path is None and Path("config.yaml").exists():
         path = "config.yaml"
     if path:
-        with open(path, encoding="utf-8") as f:
-            _merge(cfg, yaml.safe_load(f) or {})
+        try:
+            with open(path, encoding="utf-8") as f:
+                user = yaml.safe_load(f) or {}
+        except yaml.YAMLError as e:
+            mark = getattr(e, "problem_mark", None)
+            where = f" (line {mark.line + 1}, column {mark.column + 1})" if mark else ""
+            raise SystemExit(
+                f"config error in {path}{where}: {getattr(e, 'problem', e)}\n"
+                "Tip: quote values that start with % or other special characters, e.g. \"%LOCALAPPDATA%/x\"."
+            ) from None
+        if not isinstance(user, dict):
+            raise SystemExit(f"config error in {path}: top level must be a mapping of sections")
+        _merge(cfg, user)
     if overrides:
         _merge(cfg, overrides)
+    for k in ("cache_dir", "output_dir", "model_cache_dir", "music_dir"):  # expand %VAR% / $VAR / ~
+        v = cfg["paths"].get(k)
+        if isinstance(v, str):
+            cfg["paths"][k] = os.path.expandvars(os.path.expanduser(v))
+    if isinstance(cfg["render"].get("lut"), str):
+        cfg["render"]["lut"] = os.path.expandvars(os.path.expanduser(cfg["render"]["lut"]))
     return Cfg(cfg)
 
 
