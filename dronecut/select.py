@@ -147,22 +147,28 @@ def _layout(ordered: list[dict], plan: MusicPlan, cfg: Cfg, bar_dur: float) -> l
         if bar >= plan.n_bars:
             break
         wl = w["end"] - w["start"]
-        feas = int(np.floor(wl / bar_dur + 1e-6))
+        feas = int(np.floor(wl / bar_dur + 2e-3))
         if feas < 1:
             continue
         smooth = w["feat"]["shake"] < 0.35 * cfg.tech.shake_max and cfg.tech.motion_target[0] <= w["feat"]["motion"] <= cfg.tech.motion_target[1]
         speed = slow if (slow < 1.0 and smooth) else 1.0
         nb = min(plan.bars_pref[bar], feas, plan.n_bars - bar)
+        if w.get("hud"):  # a HUD moment keeps the whole long shot, at normal speed
+            speed, nb = 1.0, min(feas, plan.n_bars - bar)
+            if nb < feas:  # not enough music left for the full-length shot: skip, the fitting step makes room
+                continue
         if speed < 1.0:  # slow-mo consumes fewer source seconds; may allow longer output
             nb = min(plan.bars_pref[bar], max(1, int(np.floor(wl / speed / bar_dur + 1e-6))), plan.n_bars - bar)
         out_dur = float(plan.bar_times[bar + nb] - plan.bar_times[bar])
         src_dur = out_dur * speed
-        if src_dur > wl + 1e-6:
+        if src_dur > wl + 2e-3:
             speed, src_dur = 1.0, out_dur
-            if src_dur > wl + 1e-6:
+            if src_dur > wl + 2e-3:
                 continue
         src_start = w["start"] + (wl - src_dur) / 2.0
-        if w.get("pinned") and w.get("pin_range"):  # centre the cut on the part the user asked for
+        if w.get("hud"):
+            src_start = w["start"]
+        elif w.get("pinned") and w.get("pin_range"):  # centre the cut on the part the user asked for
             a, b = w["pin_range"]
             src_start = min(max((a + b) / 2.0 - src_dur / 2.0, w["start"]), w["end"] - src_dur)
         cuts.append(Cut(w, round(src_start, 3), round(src_dur, 4), round(t_out, 4), round(out_dur, 4), speed, nb))
@@ -171,7 +177,12 @@ def _layout(ordered: list[dict], plan: MusicPlan, cfg: Cfg, bar_dur: float) -> l
     return cuts
 
 
-def build_cuts(windows: list[dict], plan: MusicPlan, cfg: Cfg, seed: int = 0, pins: Pins | None = None) -> Selection:
+def _overlaps(a: dict, b: dict) -> bool:
+    return a["clip_key"] == b["clip_key"] and a["start"] < b["end"] and b["start"] < a["end"]
+
+
+def build_cuts(windows: list[dict], plan: MusicPlan, cfg: Cfg, seed: int = 0, pins: Pins | None = None,
+               tels: dict | None = None) -> Selection:
     """Pick windows, order them, and lay them on the bar grid of the music plan (cuts land on downbeats)."""
     rng = random.Random(seed)
     ok, bad = score_windows(windows, cfg, pins)
@@ -183,6 +194,16 @@ def build_cuts(windows: list[dict], plan: MusicPlan, cfg: Cfg, seed: int = 0, pi
         log.warning("must-have %s %.1f-%.1fs is shorter than one bar (%.1fs) and cannot be placed on the beat",
                     w["clip_name"], w["start"], w["end"], bar_dur)
     forced = [w for w in forced if w not in too_short]
+    if cfg.hud.enabled and cfg.hud.mode == "moments" and tels:
+        from .moments import find_moments
+
+        moments = find_moments(ok, tels, bar_dur, cfg, avoid=forced)
+        if moments:
+            log.info("HUD moments: %s", ", ".join(f"{m['hud_kind']} ({m['clip_name'][4:18]} {m['start']:.0f}-{m['end']:.0f}s)" for m in moments))
+            windows.extend(moments)  # so build.json / the report can show them
+            ok = [w for w in ok if not any(_overlaps(w, m) for m in moments)] + moments
+            sel.candidates = ok
+            forced = forced + moments
     picks = _pick_candidates(ok, plan.duration, cfg, rng, bar_dur, forced)
     ordered = _order_narrative(picks, cfg)
     cuts = _layout(ordered, plan, cfg, bar_dur)
@@ -190,7 +211,7 @@ def build_cuts(windows: list[dict], plan: MusicPlan, cfg: Cfg, seed: int = 0, pi
     while True:
         used = {c.window["id"] for c in cuts}
         missing = [w for w in forced if w["id"] not in used]
-        spare = [w for w in ordered if w["id"] in used and not w.get("pinned")]
+        spare = [w for w in ordered if w["id"] in used and not w.get("pinned") and not w.get("hud")]
         if not missing or not spare:
             break
         drop = min(spare, key=lambda w: (w["score"], w["id"]))

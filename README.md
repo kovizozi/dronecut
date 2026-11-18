@@ -118,9 +118,16 @@ The clip is any part of the file name; times are seconds or `m:ss`.
 
 With the DJI `.SRT` files next to the clips, `dronecut build --hud` overlays a glass panel with **speed, altitude, climb
 rate, distance from take-off, heading, time of day** and a **live flight-path mini-map** (speed/heading/distance are
-derived from the GPS track, the SRT has no speed field). It fades in and out at each cut and is composited in the same
-ffmpeg pass. Options under `hud:` in `config.yaml`: `style` (`full`/`minimal`), `units` (`metric`/`imperial`),
-`position`, `scale`, `accent` colour, `show_map`. Clips without a GPS fix get no HUD.
+derived from the GPS track, the SRT has no speed field).
+
+By default it is **not** on every shot. dronecut picks the few most interesting moments of your flights - **top speed,
+highest point, fast climb/dive, farthest from take-off, sustained fast flight** (`hud.moments`, default 4, never
+hovering: `hud.min_speed_kmh`) - and turns each into one **long shot** (`hud.min_s` to `hud.max_s`, whole bars on the beat,
+about 6-9 s) from footage that passed the quality filter. The HUD fades in once at the start of that shot, carries a label
+such as `TOP SPEED`, and fades out once at the end. `hud.mode: all` puts it on every cut instead.
+
+Other options under `hud:`: `style` (`full`/`minimal`), `units` (`metric`/`imperial`), `position`, `scale`, `accent`
+colour, `show_map`. Clips without a GPS fix get no HUD. It is composited in the same ffmpeg pass.
 
 ## Measured performance
 

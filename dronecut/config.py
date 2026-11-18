@@ -115,12 +115,17 @@ DEFAULTS: dict[str, Any] = {
     },
     "hud": {  # telemetry overlay from the DJI .SRT files (speed, altitude, climb, distance, heading, clock, map)
         "enabled": False,  # or pass --hud
+        "mode": "moments",  # moments: only on the best moments (top speed, highest point...) | all: on every cut
+        "moments": 4,  # how many highlight moments get the HUD
+        "min_s": 6.0,  # each moment is a long shot of at least this many seconds (whole bars)
+        "max_s": 10.0,
+        "min_speed_kmh": 8.0,  # ignore "top speed" moments slower than this (hovering is not interesting)
         "style": "full",  # full | minimal
         "units": "metric",  # metric | imperial
         "position": "bottom-left",  # bottom-left | bottom-right | top-left | top-right
         "scale": 1.0,
         "accent": "#FFB800",
-        "fade_s": 0.35,
+        "fade_s": 0.4,
         "speed_max_kmh": 60,  # full scale of the speed bar (grows automatically for fast clips)
         "show_map": True,
     },

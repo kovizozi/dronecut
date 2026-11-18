@@ -201,7 +201,15 @@ def build(cfg: Cfg, music: str, duration: float, res: int | None, vlm: bool, see
         plan = music_mod.make_plan(track, duration, cfg)
         log.info("music: %.1f BPM, %d bars (%.1fs) from %.1fs", track.bpm, plan.n_bars, plan.duration, plan.start)
     with stage("select"):
-        sel = select.build_cuts(an.windows, plan, cfg, seed=seed, pins=pins)
+        tels: dict = {}
+        if cfg.hud.enabled:
+            from .telemetry import parse_srt
+
+            for c in an.clips:
+                tel = parse_srt(c.srt_path) if c.srt_path else None
+                if tel is not None and tel.has_gps:
+                    tels[c.path] = tel
+        sel = select.build_cuts(an.windows, plan, cfg, seed=seed, pins=pins, tels=tels)
         log.info("%d accepted / %d rejected windows -> %d cuts", len(sel.candidates), len(sel.rejected), len(sel.cuts))
         if not sel.cuts:
             raise SystemExit("no usable windows survived rejection - check report / loosen thresholds in config.yaml")
@@ -213,7 +221,7 @@ def build(cfg: Cfg, music: str, duration: float, res: int | None, vlm: bool, see
             from .hud import Hud
             from .render import choose_fps, out_size
 
-            hud = Hud(cfg, out_size(res or cfg.render.resolution)[1], float(choose_fps(sel.cuts, clips, cfg)))
+            hud = Hud(cfg, out_size(res or cfg.render.resolution)[1], float(choose_fps(sel.cuts, clips, cfg)), tele=tels)
         info = render(sel.cuts, plan, clips, cfg, mp4, res=res, music_path=str(mpath), hud=hud)
     with stage("export"):
         fcp = export.write_fcpxml(out / "dronecut_highlight.fcpxml", sel.cuts, plan, clips, info.fps, res or cfg.render.resolution, str(mpath))

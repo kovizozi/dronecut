@@ -229,6 +229,10 @@ const FORM = [
   ]],
   ['Telemetry overlay (from the .SRT files)', [
     {k: 'hud.enabled', label: 'Show speed / altitude / map', type: 'bool', hint: 'Speed, heading and distance are computed from the GPS track.'},
+    {k: 'hud.mode', label: 'Where to show it', type: 'select', opts: [['moments', 'Only on the best moments (top speed, highest point…)'], ['all', 'On every shot']]},
+    {k: 'hud.moments', label: 'Number of highlight moments', type: 'number', min: 1, max: 10, step: 1, hint: 'Each becomes a long shot with the HUD'},
+    {k: 'hud.min_s', label: 'Shortest moment (seconds)', type: 'number', min: 3, max: 20, step: 1},
+    {k: 'hud.min_speed_kmh', label: 'Ignore moments slower than (km/h)', type: 'number', min: 0, max: 80, step: 1},
     {k: 'hud.style', label: 'Style', type: 'select', opts: [['full', 'Full (speed, altitude, climb, distance, heading, time, map)'], ['minimal', 'Minimal (speed + altitude)']]},
     {k: 'hud.units', label: 'Units', type: 'select', opts: [['metric', 'km/h, m'], ['imperial', 'mph, ft']]},
     {k: 'hud.position', label: 'Position', type: 'select', opts: [['bottom-left', 'Bottom left'], ['bottom-right', 'Bottom right'], ['top-left', 'Top left'], ['top-right', 'Top right']]},

@@ -148,6 +148,8 @@ def write_report(build_json: Path, cache: Path, out_html: Path, max_rejected: in
     for i, c in enumerate(d["cuts"], 1):
         w = wins[c["window_id"]]
         star = " &#11088;" if c.get("pinned") else ""
+        if w.get("hud_kind"):
+            star += " &#128202; HUD: " + html.escape(w["hud_kind"])
         cut_cards.append(_card(w, rel(w), f' &rarr; <b>#{i}</b>{star} @ {c["out_start"]:.1f}s ({c["bars"]} bar{"s" if c["bars"] > 1 else ""})'))
     m = d.get("music", {})
     tim = "".join(f"<tr><td>{html.escape(k)}</td><td>{v:.1f}s</td></tr>" for k, v in d.get("timings", {}).items())

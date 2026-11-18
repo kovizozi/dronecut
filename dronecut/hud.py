@@ -64,7 +64,7 @@ class _Map:
 
 
 class Hud:
-    def __init__(self, cfg: Cfg, out_height: int, fps: float):
+    def __init__(self, cfg: Cfg, out_height: int, fps: float, tele: dict | None = None):
         h = cfg.hud
         self.style = h.style if h.style in ("full", "minimal") else "full"
         self.imperial = h.units == "imperial"
@@ -73,10 +73,13 @@ class Hud:
         self.show_map = bool(h.show_map) and self.style == "full"
         self.position = h.position
         self.speed_max = float(h.speed_max_kmh)
-        self.W, self.H = (840, 300) if self.style == "full" else (520, 214)
+        self.W, self.PH = (840, 300) if self.style == "full" else (520, 214)  # panel size; the canvas adds a label strip on top
+        self.TOP = 56
+        self.H = self.PH + self.TOP
+        self.mode = h.mode  # "moments": only on the picked highlights | "all": on every cut
         self.scale = float(h.scale) * out_height / 1080.0
         self.fps = float(min(15.0, fps))
-        self._tele: dict[str, Telemetry | None] = {}
+        self._tele: dict[str, Telemetry | None] = dict(tele or {})
         self._maps: dict[str, _Map] = {}
         self._static = self._make_static()
 
@@ -128,9 +131,9 @@ class Hud:
 
     # ------------------------------------------------------------------ drawing
     def _make_static(self) -> Image.Image:
-        img = Image.new("RGBA", (self.W, self.H), (0, 0, 0, 0))
+        img = Image.new("RGBA", (self.W, self.PH), (0, 0, 0, 0))
         d = ImageDraw.Draw(img, "RGBA")
-        d.rounded_rectangle((0, 0, self.W - 1, self.H - 1), 30, fill=(8, 10, 14, 150), outline=(255, 255, 255, 50), width=1)
+        d.rounded_rectangle((0, 0, self.W - 1, self.PH - 1), 30, fill=(8, 10, 14, 150), outline=(255, 255, 255, 50), width=1)
         lab = font(19, True)
         dim = (255, 255, 255, 150)
         full = self.style == "full"
@@ -157,7 +160,7 @@ class Hud:
                 "vs": vs, "vs_unit": "ft/s" if self.imperial else "m/s", "dist": dist_s, "clock": clock_s,
                 "frac": min(1.0, st["speed"] * 3.6 / max(speed_max, 1.0))}
 
-    def draw(self, tel: Telemetry, key: str, t: float, alpha: float, speed_max: float) -> bytes:
+    def draw(self, tel: Telemetry, key: str, t: float, alpha: float, speed_max: float, badge: str = "") -> bytes:
         st = tel.at(t)
         v = self._fmt(st, speed_max)
         img = self._static.copy()
@@ -209,10 +212,19 @@ class Hud:
                 a = math.radians(st["heading"])
                 md.line([(px, py), (px + 22 * math.sin(a), py - 22 * math.cos(a))], fill=WHITE + (230,), width=3)
                 img.alpha_composite(m, (self.W - 230 - 30, 36))
+        canvas = Image.new("RGBA", (self.W, self.H), (0, 0, 0, 0))
+        canvas.alpha_composite(img, (0, self.TOP))
+        if badge:
+            cd = ImageDraw.Draw(canvas, "RGBA")
+            bf = font(24, True)
+            tw = cd.textlength(badge, font=bf)
+            cd.rounded_rectangle((0, 6, tw + 46, 46), 20, fill=(*self.accent, 255))
+            cd.ellipse((17, 21, 27, 31), fill=(20, 20, 20, 255))
+            cd.text((38, 26), badge, font=bf, fill=(20, 20, 20, 255), anchor="lm")
         if alpha < 0.999:
             lut = [int(i * alpha) for i in range(256)]
-            img.putalpha(img.getchannel("A").point(lut))
-        return img.tobytes()
+            canvas.putalpha(canvas.getchannel("A").point(lut))
+        return canvas.tobytes()
 
     # ------------------------------------------------------------------ frame stream
     def frames(self, cuts: list, clips_by_path: dict, total_t: float) -> Iterator[bytes]:
@@ -226,7 +238,7 @@ class Hud:
             c = cuts[i]
             end = c.out_start + c.out_dur
             tel = self.telemetry(c.window["clip_path"], getattr(clips_by_path.get(c.window["clip_path"]), "srt_path", ""))
-            if tel is None or t_out >= end:
+            if tel is None or t_out >= end or (self.mode == "moments" and not c.window.get("hud")):
                 yield blank
                 continue
             a = 1.0
@@ -236,7 +248,8 @@ class Hud:
             if key not in smax:
                 smax[key] = max(self.speed_max, float(tel.speed.max()) * 3.6 * 1.1)
             src_t = c.src_start + (t_out - c.out_start) * c.speed
-            yield self.draw(tel, key, src_t, a, smax[key])
+            badge = c.window.get("hud_kind", "") if self.mode == "moments" else ""
+            yield self.draw(tel, key, src_t, a, smax[key], badge)
 
     def summaries(self, cuts: list) -> dict:
         out = {}
