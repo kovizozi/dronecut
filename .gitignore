@@ -39,3 +39,5 @@ config.yaml
 .claude/
 ui_settings.json
 must_have.json
+output*/
+report_thumbs/

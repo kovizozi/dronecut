@@ -133,6 +133,9 @@ def build_graph(cuts: list[Cut], plan: MusicPlan, clips_by_path: dict, cfg: Cfg,
     return ";\n".join(chains), total_frames, []
 
 
+HW_CODECS = {"hevc", "h264", "av1", "vp9", "mpeg2video"}
+
+
 @lru_cache(maxsize=1)
 def _script_flag() -> str:
     """ffmpeg >= 7 reads a filter script via ``-/filter_complex``; older builds use ``-filter_complex_script``."""
@@ -151,6 +154,8 @@ def render(cuts: list[Cut], plan: MusicPlan, clips_by_path: dict, cfg: Cfg, out_
     script, total_frames, _ = build_graph(cuts, plan, clips_by_path, cfg, fps, size, final="vbase" if hud else "vout")
     total_t = total_frames / float(fps)
     args: list[str] = [which("ffmpeg"), "-y", "-hide_banner", "-loglevel", "error", "-stats"]
+    mode = str(cfg.render.get("hwdecode", "auto"))
+    use_hw = mode == "on" or (mode == "auto" and nvenc_available())  # NVDEC decodes on the GPU, frames come back to RAM
     for c in cuts:
         info = clips_by_path[c.window["clip_path"]]
         cf = float(cfg.render.crossfade_s)
@@ -159,7 +164,8 @@ def render(cuts: list[Cut], plan: MusicPlan, clips_by_path: dict, cfg: Cfg, out_
         tail = min(ext, max(0.0, info.duration - c.src_start - c.src_dur) / c.speed) if cf > 0 else 0.0
         s0 = c.src_start - head * c.speed
         dur = c.src_dur + (head + tail) * c.speed + 0.25
-        args += ["-ss", f"{s0:.4f}", "-t", f"{dur:.4f}", "-i", info.path]
+        hw_in = ["-hwaccel", "cuda"] if (use_hw and info.codec in HW_CODECS) else []
+        args += [*hw_in, "-ss", f"{s0:.4f}", "-t", f"{dur:.4f}", "-i", info.path]
     music_idx = len(cuts)
     mfile = music_path or plan.track.path
     fade = min(float(cfg.music.fade_out_s), total_t / 3)
@@ -195,13 +201,26 @@ def render(cuts: list[Cut], plan: MusicPlan, clips_by_path: dict, cfg: Cfg, out_
                  "-t", f"{total_t:.4f}", "-movflags", "+faststart", str(out_path)]
     log.info("rendering %d cuts -> %s (%dx%d @ %.3f fps, %.1fs, encoder %s)", len(cuts), out_path.name, *size, float(fps), total_t, enc[1])
     full = [*args, _script_flag(), str(script_path), *tail_args]
-    try:
+    def attempt(cmd: list[str]) -> tuple[str, int]:
         if hud is None:
-            cp = run(full, check=False)
-            err = cp.stderr
-            rc = cp.returncode
-        else:
-            err, rc = _run_with_hud(full, hud.frames(cuts, clips_by_path, total_t))
+            cp = run(cmd, check=False)
+            return cp.stderr, cp.returncode
+        return _run_with_hud(cmd, hud.frames(cuts, clips_by_path, total_t))
+
+    try:
+        err, rc = attempt(full)
+        if rc != 0 and use_hw:
+            log.warning("GPU decoding failed, retrying on the CPU (%s)", (err.strip().splitlines() or ["?"])[-1][:120])
+            nohw: list[str] = []
+            skip = False
+            for i, a in enumerate(full):
+                if skip:
+                    skip = False
+                elif a == "-hwaccel" and full[i + 1] == "cuda":
+                    skip = True
+                else:
+                    nohw.append(a)
+            err, rc = attempt(nohw)
         if rc != 0:
             raise RuntimeError("ffmpeg render failed:\n" + "\n".join(err.strip().splitlines()[-15:]))
     finally:

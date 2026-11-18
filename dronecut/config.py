@@ -109,6 +109,7 @@ DEFAULTS: dict[str, Any] = {
         "mix_source_audio": False,
         "source_audio_gain": 0.35,
         "nvenc": "auto",  # auto | on | off
+        "hwdecode": "auto",  # GPU (NVDEC) decoding of the source clips: auto | on | off
         "codec": "h264",  # h264 | hevc
         "crf": 18,
     },

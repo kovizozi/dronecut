@@ -213,6 +213,7 @@ const FORM = [
     {s: 'seed', label: 'Variation (seed)', type: 'number', step: 1, hint: 'Same seed = same edit. Change it for a different cut.'},
     {k: 'render.codec', label: 'Codec', type: 'select', opts: [['h264', 'H.264 (compatible)'], ['hevc', 'HEVC (smaller)']]},
     {k: 'render.nvenc', label: 'GPU encoder (NVENC)', type: 'select', opts: [['auto', 'Auto'], ['on', 'Always'], ['off', 'Never (CPU)']]},
+    {k: 'render.hwdecode', label: 'GPU decoding of the clips (NVDEC)', type: 'select', opts: [['auto', 'Auto'], ['on', 'Always'], ['off', 'Never (CPU)']], hint: 'About 2x faster rendering of 4K HEVC'},
     {k: 'render.crf', label: 'Quality (lower = better)', type: 'number', min: 10, max: 35, step: 1},
   ]],
   ['Cutting & look', [

@@ -333,3 +333,11 @@ def test_pins_file_roundtrip_and_end_to_end_include(media, music_file, cfg, tmp_
     assert any(c["pinned"] for c in data["cuts"])
     page = (tmp_path / "out" / "report.html").read_text(encoding="utf-8")
     assert "Download must_have.json" in page and 'data-state="in"' in page
+
+
+def test_gpu_decode_requested_falls_back_cleanly(media, music_file, cfg, tmp_path):
+    """hwdecode=on must never break a render: with a GPU it is used, without one ffmpeg fails and we retry on the CPU."""
+    cfg["render"]["hwdecode"] = "on"
+    r = pipeline.build(cfg, str(music_file), 20.0, 270, False, 2, tmp_path / "out", footage=media, fast=True)
+    cap = cv2.VideoCapture(str(r["mp4"]))
+    assert cap.get(cv2.CAP_PROP_FRAME_COUNT) > 100

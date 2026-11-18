@@ -94,6 +94,7 @@ render:
   mix_source_audio: false         # duck the music under the original audio (only with crossfade_s: 0)
   source_audio_gain: 0.35
   nvenc: auto                     # auto | on | off
+  hwdecode: auto                  # GPU (NVDEC) decoding of the source clips, ~2x faster for 4K HEVC: auto | on | off
   codec: h264                     # h264 | hevc
   crf: 18                         # quality (cq for NVENC)
 
